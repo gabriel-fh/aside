@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('aside', {
   setSettings: invoke('settings:set'),
   setApiKey: invoke('key:set'),
   listModels: invoke('models:list'),
+  getKeys: invoke('keys:get'),
   setCustomKey: invoke('custom-key:set'),
   listCustomModels: invoke('custom:models'),
 
@@ -22,6 +23,8 @@ contextBridge.exposeInMainWorld('aside', {
 
   ask: invoke('ask'),
   cancelAsk: invoke('ask:cancel'),
+  askRegion: invoke('ask:region'),
+  regionDone: (rect) => ipcRenderer.send('region:done', rect),
 
   historyList: invoke('history:list'),
   historyGet: invoke('history:get'),

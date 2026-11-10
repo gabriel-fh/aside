@@ -1,0 +1,40 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.32);
+  user-select: none;
+  cursor: default;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Com um trecho marcado, o escurecimento passa a ser a sombra em volta do retangulo. */
+body.selecting {
+  background: transparent;
+}
+
+#hint {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(13, 15, 21, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f2f4f8;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+#box {
+  position: fixed;
+  border: 2px solid #4c8dff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+}
+
+[hidden] {
+  display: none;
+}

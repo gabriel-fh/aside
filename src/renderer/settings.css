@@ -229,6 +229,10 @@ textarea {
   min-width: 0;
 }
 
+.row.wrap-row input {
+  min-width: 220px;
+}
+
 .row.actions {
   margin: 8px 0 10px;
 }

@@ -407,3 +407,10 @@ body {
 #sendBtn {
   padding: 8px;
 }
+
+/* O cursor nunca muda sobre a barra e o painel: fica sempre a seta padrao. */
+*,
+*::before,
+*::after {
+  cursor: default !important;
+}

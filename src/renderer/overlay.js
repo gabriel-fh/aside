@@ -293,6 +293,7 @@
     api.ask({ text: takeQuestion() });
   });
   el.screenBtn.addEventListener('click', () => api.ask({ text: takeQuestion(), withScreen: true }));
+  document.getElementById('regionBtn').addEventListener('click', () => api.askRegion(takeQuestion()));
   el.stopBtn.addEventListener('click', () => api.cancelAsk());
   for (const chip of document.querySelectorAll('.chip')) {
     chip.addEventListener('click', () => {

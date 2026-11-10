@@ -107,10 +107,12 @@
             </p>
             <label class="field">
               <span>Sua chave do OpenRouter <em id="keyState"></em></span>
-              <div class="row">
-                <input id="apiKey" type="password" placeholder="Cole aqui a chave que começa com sk-or-" autocomplete="off" />
-                <button id="saveKey" class="pill">Salvar</button>
-                <button id="clearKey" class="ghost">Remover</button>
+              <div class="row wrap-row">
+                <input id="apiKey" type="password" placeholder="Cole aqui a chave que começa com sk-or-" autocomplete="off" spellcheck="false" />
+                <button id="showKey" class="ghost" type="button">Mostrar</button>
+                <button id="copyKey" class="ghost" type="button">Copiar</button>
+                <button id="saveKey" class="pill" type="button">Salvar</button>
+                <button id="clearKey" class="ghost danger" type="button">Remover</button>
               </div>
               <small>
                 Não tem chave? <button id="openKeys" class="link">Criar uma no site do OpenRouter</button>. Ela fica cifrada
@@ -155,9 +157,12 @@
             <label class="field"><span>Endereço da API</span><input id="customBase" spellcheck="false" /></label>
             <label class="field">
               <span>Chave do serviço <em id="customKeyState"></em></span>
-              <div class="row">
-                <input id="customKey" type="password" placeholder="Cole a chave do serviço" autocomplete="off" />
-                <button id="saveCustomKey" class="pill">Salvar</button>
+              <div class="row wrap-row">
+                <input id="customKey" type="password" placeholder="Cole a chave do serviço" autocomplete="off" spellcheck="false" />
+                <button id="showCustomKey" class="ghost" type="button">Mostrar</button>
+                <button id="copyCustomKey" class="ghost" type="button">Copiar</button>
+                <button id="saveCustomKey" class="pill" type="button">Salvar</button>
+                <button id="clearCustomKey" class="ghost danger" type="button">Remover</button>
               </div>
             </label>
             <label class="field">

@@ -104,7 +104,16 @@ function contextBlock(assistant, limit) {
   return `${header}\n\n${parts.join('\n\n')}`.slice(0, limit);
 }
 
-function buildChatMessages({ assistant, responseLanguage, lines, turns, request, imageDataUrl, contextLimit = 120000 }) {
+function buildChatMessages({
+  assistant,
+  responseLanguage,
+  lines,
+  turns,
+  request,
+  imageDataUrl,
+  screenText,
+  contextLimit = 120000,
+}) {
   const system = [
     BASE_PROMPT,
     assistant && assistant.prompt ? assistant.prompt : '',
@@ -121,7 +130,11 @@ function buildChatMessages({ assistant, responseLanguage, lines, turns, request,
   }
 
   const transcript = formatTranscript(lines);
-  const text = [transcript ? `Transcrição recente:\n${transcript}` : '', `Pedido: ${request}`]
+  const text = [
+    transcript ? `Transcrição recente:\n${transcript}` : '',
+    screenText ? `Texto que está na tela do usuário agora (lido por OCR, pode ter pequenos erros):\n${screenText}` : '',
+    `Pedido: ${request}`,
+  ]
     .filter(Boolean)
     .join('\n\n');
 

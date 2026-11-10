@@ -21,6 +21,7 @@ const openrouter = require('./openrouter');
 const local = require('./local');
 const mcp = require('./mcp');
 const { extractFile } = require('./context');
+const { readScreenText } = require('./ocr');
 const { SPEAKER_LABEL, buildChatMessages, buildSummaryMessages } = require('./prompts');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -238,6 +239,7 @@ function registerShortcuts() {
     // Passa pela barra flutuante: ela corta a fala em andamento antes de perguntar.
     ask: () => (overlay ? overlay.webContents.send('cmd', { type: 'answer-now' }) : ask({ answerNow: true })),
     screen: () => ask({ withScreen: true }),
+    region: () => askRegion(''),
     session: () => overlay && overlay.webContents.send('cmd', { type: 'toggle-session' }),
     up: () => moveOverlay(0, -40),
     down: () => moveOverlay(0, 40),
@@ -275,9 +277,28 @@ function changeSettings(patch) {
 
 /* ---------- captura de tela ---------- */
 
-async function captureScreen() {
-  const display = overlay ? screen.getDisplayMatching(overlay.getBounds()) : screen.getPrimaryDisplay();
-  const width = 1600;
+// Modelos que recusaram imagem nesta execucao: para eles a tela vai como texto lido por OCR.
+const noVision = new Set();
+
+// O modelo consegue ler imagem? Sem informacao, tenta: se o provedor recusar, cai para o OCR.
+async function seesImages(target) {
+  if (target.local || noVision.has(target.model)) return false;
+  if (settings.load().chatProvider !== 'openrouter') return true;
+  try {
+    const model = (await openrouter.listModels()).find((m) => m.id === target.model);
+    return model ? model.input.includes('image') : true;
+  } catch {
+    return true;
+  }
+}
+
+const overlayDisplay = () =>
+  overlay ? screen.getDisplayMatching(overlay.getBounds()) : screen.getPrimaryDisplay();
+
+// Captura a tela onde a barra esta, na resolucao real, que deixa letra pequena legivel.
+async function grabScreen() {
+  const display = overlayDisplay();
+  const width = Math.min(3840, Math.round(display.size.width * display.scaleFactor));
   const height = Math.round((width * display.size.height) / display.size.width);
   // O overlay fica fora da imagem enviada ao modelo.
   const stealth = Boolean(settings.load().stealth);
@@ -287,15 +308,98 @@ async function captureScreen() {
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
     const source = sources.find((s) => String(s.display_id) === String(display.id)) || sources[0];
     if (!source) throw new Error('Nenhuma tela disponível para captura.');
-    return `data:image/jpeg;base64,${source.thumbnail.toJPEG(72).toString('base64')}`;
+    return source.thumbnail;
   } finally {
     if (overlay && !overlay.isDestroyed() && !stealth) overlay.setContentProtection(false);
   }
 }
 
+// Imagem para o modelo: no maximo 1600 px de largura, em JPEG.
+function shotToDataUrl(image) {
+  const { width } = image.getSize();
+  const sized = width > 1600 ? image.resize({ width: 1600, quality: 'best' }) : image;
+  return `data:image/jpeg;base64,${sized.toJPEG(80).toString('base64')}`;
+}
+
+// Imagem para o OCR: recortes pequenos sao ampliados, o que melhora a leitura.
+function shotToPng(image) {
+  const { width } = image.getSize();
+  const sized = width < 900 ? image.resize({ width: width * 2, quality: 'best' }) : image;
+  return sized.toPNG();
+}
+
+/* ---------- captura livre: escolher um trecho da tela ---------- */
+
+let regionWin = null;
+
+// Congela a tela, deixa o usuario arrastar um retangulo e devolve so aquele trecho.
+async function pickRegion() {
+  if (regionWin) return null;
+  const display = overlayDisplay();
+  const full = await grabScreen();
+  const scale = full.getSize().width / display.size.width;
+
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (image) => {
+      if (done) return;
+      done = true;
+      ipcMain.removeListener('region:done', onDone);
+      if (regionWin && !regionWin.isDestroyed()) regionWin.destroy();
+      regionWin = null;
+      resolve(image);
+    };
+    const onDone = (_event, rect) => {
+      if (!rect || rect.width < 8 || rect.height < 8) return finish(null);
+      const size = full.getSize();
+      const x = Math.max(0, Math.round(rect.x * scale));
+      const y = Math.max(0, Math.round(rect.y * scale));
+      finish(
+        full.crop({
+          x,
+          y,
+          width: Math.min(size.width - x, Math.round(rect.width * scale)),
+          height: Math.min(size.height - y, Math.round(rect.height * scale)),
+        })
+      );
+    };
+
+    regionWin = new BrowserWindow({
+      ...display.bounds,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      skipTaskbar: true,
+      hasShadow: false,
+      show: false,
+      webPreferences: { preload: PRELOAD, contextIsolation: true },
+    });
+    regionWin.setAlwaysOnTop(true, 'screen-saver');
+    if (settings.load().stealth) regionWin.setContentProtection(true);
+    regionWin.loadFile(path.join(ROOT, 'src', 'renderer', 'region.html'));
+    regionWin.once('ready-to-show', () => {
+      regionWin.show();
+      regionWin.focus();
+    });
+    regionWin.on('closed', () => finish(null));
+    regionWin.on('blur', () => finish(null));
+    ipcMain.on('region:done', onDone);
+  });
+}
+
+async function askRegion(text) {
+  try {
+    const shot = await pickRegion();
+    if (shot) await ask({ text, withScreen: true, shot });
+  } catch (error) {
+    status('error', error.message);
+  }
+}
+
 /* ---------- perguntas ao modelo ---------- */
 
-async function ask({ text = '', withScreen = false, auto = false, answerNow = false } = {}) {
+async function ask({ text = '', withScreen = false, auto = false, answerNow = false, shot = null } = {}) {
   const s = settings.publicView();
   const useLocal = s.chatProvider === 'local';
   if (s.chatProvider === 'openrouter' && !s.hasKey) {
@@ -316,7 +420,8 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
       : answerNow
         ? 'Responda agora à última pergunta ou fala de Eles. Comece pela resposta que eu posso dizer em voz alta, em 1 a 3 frases, na primeira pessoa. Só depois, se ajudar, acrescente detalhes curtos.'
         : 'Com base na conversa até aqui, o que é mais útil eu saber ou dizer agora?');
-  const label = typed || (withScreen ? 'Análise da tela' : answerNow ? 'Responder agora' : 'O que vem agora?');
+  const label =
+    typed || (withScreen ? (shot ? 'Análise do recorte' : 'Análise da tela') : answerNow ? 'Responder agora' : 'O que vem agora?');
   const assistant = s.assistants.find((a) => a.id === s.activeAssistantId) || s.assistants[0];
 
   if (overlay && !overlay.isVisible() && !auto) overlay.showInactive();
@@ -329,29 +434,56 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
       await Promise.race([Promise.allSettled([...pendingSegments]), new Promise((r) => setTimeout(r, 8000))]);
       if (controller.signal.aborted) throw new Error('Cancelado.');
     }
-    if (withScreen && useLocal) status('info', 'O modelo local não lê imagens: a tela foi ignorada.');
     const target = await chatTarget();
-    const imageDataUrl = withScreen && !useLocal ? await captureScreen() : null;
-    const messages = buildChatMessages({
-      assistant,
-      responseLanguage: s.responseLanguage,
-      lines: live.lines,
-      turns: live.turns,
-      request,
-      imageDataUrl,
-      contextLimit: target.local ? 12000 : 120000,
-    });
     // Ferramentas so em perguntas feitas pelo usuario e com modelo na nuvem.
     const tools = auto || target.local ? [] : mcp.toolsForModel();
-    full = await openrouter.runChat({
-      ...target,
-      messages: target.local ? textOnly(messages) : messages,
-      tools,
-      signal: controller.signal,
-      onDelta: (delta) => broadcast('answer:delta', { id, text: delta }),
-      callTool: (name, args) => mcp.call(name, args),
-      onTool: (name) => status('info', `Usando ferramenta: ${mcp.label(name)}`),
-    });
+    let streamed = false;
+    let screenImage = null;
+
+    // A tela vai como imagem quando o modelo enxerga, ou como texto lido por OCR quando nao.
+    const run = async (useImage) => {
+      let imageDataUrl = null;
+      let screenText = '';
+      if (withScreen && !screenImage) screenImage = shot || (await grabScreen());
+      if (withScreen && useImage) imageDataUrl = shotToDataUrl(screenImage);
+      else if (withScreen) {
+        screenText = await readScreenText(shotToPng(screenImage));
+        if (!screenText) throw new Error('Não encontrei texto nesse trecho da tela.');
+      }
+      const messages = buildChatMessages({
+        assistant,
+        responseLanguage: s.responseLanguage,
+        lines: live.lines,
+        turns: live.turns,
+        request,
+        imageDataUrl,
+        screenText,
+        contextLimit: target.local ? 12000 : 120000,
+      });
+      return openrouter.runChat({
+        ...target,
+        messages: imageDataUrl ? messages : textOnly(messages),
+        tools,
+        signal: controller.signal,
+        onDelta: (delta) => {
+          streamed = true;
+          broadcast('answer:delta', { id, text: delta });
+        },
+        callTool: (name, args) => mcp.call(name, args),
+        onTool: (name) => status('info', `Usando ferramenta: ${mcp.label(name)}`),
+      });
+    };
+
+    const withImage = withScreen && (await seesImages(target));
+    try {
+      full = await run(withImage);
+    } catch (error) {
+      // Provedor recusou a imagem antes de responder: refaz com o texto da tela.
+      if (!withImage || streamed || controller.signal.aborted) throw error;
+      noVision.add(target.model);
+      status('info', 'Este modelo não lê imagens: usando o texto da tela.');
+      full = await run(false);
+    }
     live.turns.push({ q: request, a: full });
     if (live.turns.length > 20) live.turns.shift();
     db.addEntry(live.id, { kind: 'question', text: label });
@@ -553,6 +685,11 @@ function registerIpc() {
     broadcast('settings', next);
     return next;
   });
+  // So a janela principal recebe as chaves, para mostrar, copiar e editar no campo.
+  ipcMain.handle('keys:get', (event) => {
+    if (!settingsWin || event.sender !== settingsWin.webContents) return { openrouter: '', custom: '' };
+    return { openrouter: settings.getApiKey(), custom: settings.getCustomKey() };
+  });
   ipcMain.handle('custom-key:set', (_e, key) => {
     settings.setCustomKey(key);
     const next = viewSettings();
@@ -587,6 +724,9 @@ function registerIpc() {
 
   ipcMain.handle('ask', (_e, request) => {
     ask(request || {});
+  });
+  ipcMain.handle('ask:region', (_e, text) => {
+    askRegion(String(text || ''));
   });
   ipcMain.handle('ask:cancel', () => {
     if (currentAsk) currentAsk.abort();
@@ -692,6 +832,22 @@ async function devShots() {
   });
   broadcast('answer:end', { id: 1 });
   await new Promise((r) => setTimeout(r, 700));
+  // Captura livre: abre a selecao, confirma um retangulo por codigo e le o recorte por OCR.
+  try {
+    const picking = pickRegion();
+    await new Promise((r) => setTimeout(r, 900));
+    const view = await regionWin.webContents.capturePage();
+    fs.writeFileSync(path.join(SHOT_DIR, 'region.png'), view.toPNG());
+    await regionWin.webContents.executeJavaScript('window.aside.regionDone({ x: 0, y: 0, width: 700, height: 260 }); 1');
+    const crop = await picking;
+    fs.writeFileSync(path.join(SHOT_DIR, 'recorte.png'), crop.toPNG());
+    const started = Date.now();
+    const text = await readScreenText(shotToPng(crop));
+    const size = crop.getSize();
+    console.log(`[recorte] ${size.width}x${size.height}, OCR em ${Date.now() - started} ms:`, JSON.stringify(text.slice(0, 160)));
+  } catch (error) {
+    console.log('[recorte] FALHOU:', error.message);
+  }
   const audioCheck = await overlay.webContents.executeJavaScript(
     `(() => { let err = []; return window.asideAudio.start({ mic: true, system: true, speakerMode: false,
       onSegment() {}, onLevel() {}, onError(m) { err.push(m); } })

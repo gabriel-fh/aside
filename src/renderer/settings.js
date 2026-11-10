@@ -178,7 +178,8 @@
       ['toggle', 'Mostrar ou esconder a barra'],
       ['session', 'Iniciar ou encerrar a sessão'],
       ['ask', 'Responder à última pergunta'],
-      ['screen', 'Analisar a tela'],
+      ['screen', 'Analisar a tela inteira'],
+      ['region', 'Analisar um trecho da tela'],
     ];
     $('homeShortcuts').replaceChildren(
       ...keys
@@ -292,13 +293,14 @@
       const key = $('apiKey').value.trim();
       if (!key) return toast('Cole a chave antes de salvar.', true);
       await api.setApiKey(key);
-      $('apiKey').value = '';
       toast('Chave salva.');
     })
   );
   $('clearKey').addEventListener('click', () =>
     guard(async () => {
+      if (!confirm('Remover a chave do OpenRouter?')) return;
       await api.setApiKey('');
+      $('apiKey').value = '';
       toast('Chave removida.');
     })
   );
@@ -312,11 +314,48 @@
   );
   $('saveCustomKey').addEventListener('click', () =>
     guard(async () => {
-      await api.setCustomKey($('customKey').value.trim());
-      $('customKey').value = '';
+      const key = $('customKey').value.trim();
+      if (!key) return toast('Cole a chave antes de salvar.', true);
+      await api.setCustomKey(key);
       toast('Chave do serviço salva.');
     })
   );
+  $('clearCustomKey').addEventListener('click', () =>
+    guard(async () => {
+      if (!confirm('Remover a chave deste serviço?')) return;
+      await api.setCustomKey('');
+      $('customKey').value = '';
+      toast('Chave do serviço removida.');
+    })
+  );
+
+  // Mostrar ou ocultar e copiar o que esta no campo de chave.
+  function keyField(inputId, showId, copyId) {
+    $(showId).addEventListener('click', () => {
+      const hidden = $(inputId).type === 'password';
+      $(inputId).type = hidden ? 'text' : 'password';
+      $(showId).textContent = hidden ? 'Ocultar' : 'Mostrar';
+    });
+    $(copyId).addEventListener('click', () =>
+      guard(async () => {
+        const value = $(inputId).value.trim();
+        if (!value) return toast('Não há chave para copiar.', true);
+        await navigator.clipboard.writeText(value);
+        toast('Chave copiada.');
+      })
+    );
+  }
+  keyField('apiKey', 'showKey', 'copyKey');
+  keyField('customKey', 'showCustomKey', 'copyCustomKey');
+
+  // As chaves salvas voltam para os campos (ocultas), para conferir, copiar ou trocar.
+  async function loadKeys() {
+    const keys = await guard(() => api.getKeys());
+    if (!keys) return;
+    if (document.activeElement !== $('apiKey')) $('apiKey').value = keys.openrouter;
+    if (document.activeElement !== $('customKey')) $('customKey').value = keys.custom;
+  }
+
   $('listCustomModels').addEventListener('click', () =>
     guard(async () => {
       await api.setSettings({ customBase: $('customBase').value.trim() });
@@ -968,7 +1007,8 @@
     ['toggle', 'Mostrar ou ocultar o overlay'],
     ['session', 'Iniciar ou parar a sessão'],
     ['ask', 'Responder à última pergunta'],
-    ['screen', 'Analisar a tela'],
+    ['screen', 'Analisar a tela inteira'],
+    ['region', 'Analisar um trecho da tela'],
     ['up', 'Mover para cima'],
     ['down', 'Mover para baixo'],
     ['left', 'Mover para a esquerda'],
@@ -1029,6 +1069,7 @@
     apply(next);
     showTab(location.hash.slice(1) || 'inicio');
     loadModels();
+    loadKeys();
     api.getSession().then((state) => {
       sessionActive = Boolean(state.active);
       renderHome();
