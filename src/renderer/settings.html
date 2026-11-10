@@ -284,6 +284,14 @@
               </select>
               <small>O modelo local não enxerga imagens: a análise de tela usa só a transcrição.</small>
             </label>
+            <label class="check">
+              <input id="hybridLocal" type="checkbox" />
+              <span><b>Perguntas faladas neste computador</b><small>Com a nuvem escolhida acima: as respostas faladas saem daqui, sem gastar limite e quase instantâneas. Código, tela e desafio continuam na nuvem. Modelos pequenos respondem pior que a nuvem.</small></span>
+            </label>
+            <label class="check">
+              <input id="localFallback" type="checkbox" />
+              <span><b>Reserva quando a nuvem estourar o limite</b><small>Tudo vai para a nuvem. Se ela recusar por limite, este computador responde no lugar, em vez de fazer você esperar. Precisa de motor e modelo instalados abaixo.</small></span>
+            </label>
             <div class="field"><span>1. Motor</span><div id="llamaBins" class="rows"></div></div>
             <div class="field"><span>2. Modelos já baixados</span><div id="llamaModels" class="rows"></div></div>
             <div class="field"><span>Sugestões para baixar</span><div id="llamaSuggestions" class="rows"></div></div>

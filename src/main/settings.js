@@ -16,6 +16,8 @@ const DEFAULTS = {
   autoInsights: true,
   autoSummary: true,
   economy: true,
+  hybridLocal: false,
+  localFallback: false,
   captureMic: true,
   captureSystem: true,
   speakerMode: false,

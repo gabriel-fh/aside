@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const invoke = (channel) => (...args) => ipcRenderer.invoke(channel, ...args);
 
-const EVENTS = ['task', 'mcp', 'local', 'settings', 'session', 'transcript', 'answer:start', 'answer:delta', 'answer:end', 'status', 'cmd'];
+const EVENTS = ['task', 'mcp', 'local', 'settings', 'session', 'transcript', 'answer:start', 'answer:meta', 'answer:delta', 'answer:end', 'status', 'cmd'];
 
 contextBridge.exposeInMainWorld('aside', {
   getSettings: invoke('settings:get'),

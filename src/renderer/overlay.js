@@ -270,6 +270,12 @@
     setFolded(false);
     showView('answer');
   });
+  // No modo combinado, mostra quem esta respondendo.
+  api.on('answer:meta', ({ id, engine }) => {
+    if (id !== answerId) return;
+    const base = el.question.textContent.replace(/ ((neste computador|nuvem))$/, '');
+    el.question.textContent = `${base} (${engine === 'local' ? 'neste computador' : 'nuvem'})`;
+  });
   api.on('answer:delta', ({ id, text }) => {
     if (id !== answerId) return;
     answerText += text;

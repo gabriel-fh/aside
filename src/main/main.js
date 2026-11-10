@@ -67,11 +67,32 @@ const NO_KEY = 'Informe a chave do OpenRouter em Ajustes.';
 
 const customBase = () => String(settings.load().customBase || '').trim().replace(/\/+$/, '');
 
-// Para onde vai o chat: OpenRouter, outro servico compativel ou o llama.cpp local.
-async function chatTarget() {
+const localTarget = async () => ({ base: await local.llamaBase(), key: '', model: 'local', local: true });
+
+// O modelo deste computador pode ajudar a nuvem de dois jeitos, ligados em separado:
+// `hybridLocal` responde as perguntas faladas; `localFallback` so assume quando a nuvem estoura o limite.
+const hybridOn = (s = settings.load()) =>
+  Boolean(s.hybridLocal || s.localFallback) && s.chatProvider !== 'local';
+const spokenLocal = (s = settings.load()) => Boolean(s.hybridLocal) && s.chatProvider !== 'local';
+
+// Pedido que quer codigo escrito ou um exercicio resolvido: vai para o modelo mais forte.
+function looksLikeCode(text) {
+  return /c[oó]digo|implement|escrev[ae]|program[ae]|refator|snippet|live ?cod|algoritmo|complexidade|desafio|exerc[ií]cio|cri(a|e|ar) (um|uma) (fun|comp|hook|classe|api|tela|script)/i.test(
+    String(text || '')
+  );
+}
+
+// Para onde vai o chat. `route` e 'fast' (resposta falada) ou 'strong' (codigo, tela, desafio).
+// Sem o modo combinado, tudo vai para o provedor escolhido em Ajustes.
+async function chatTarget(route = 'strong') {
   const s = settings.load();
-  if (s.chatProvider === 'local') {
-    return { base: await local.llamaBase(), key: '', model: 'local', local: true };
+  if (s.chatProvider === 'local') return localTarget();
+  if (route === 'fast' && spokenLocal(s)) {
+    try {
+      return await localTarget();
+    } catch (error) {
+      status('info', `Modelo deste computador indisponível, usando a nuvem. ${error.message}`.slice(0, 220));
+    }
   }
   if (s.chatProvider === 'custom') {
     const base = customBase();
@@ -93,7 +114,7 @@ function textOnly(messages) {
 }
 
 async function translate(text, to) {
-  const target = await chatTarget();
+  const target = await chatTarget('fast');
   const out = await openrouter.complete({
     ...target,
     messages: [
@@ -278,7 +299,7 @@ function changeSettings(patch) {
   if ('stealth' in patch) applyStealth();
   if ('shortcuts' in patch) registerShortcuts();
   if (next.transcribeProvider !== 'local') local.stop('whisper');
-  if (next.chatProvider !== 'local') local.stop('llama');
+  if (next.chatProvider !== 'local' && !hybridOn(next)) local.stop('llama');
   ensureBrief();
   buildTray();
   broadcast('settings', next);
@@ -480,7 +501,6 @@ async function ask({
   if (step && !task) return status('error', 'Não há desafio em andamento. Use Tela ou Recorte no enunciado.');
   if (cont && !lastAnswer) return status('error', 'Não há resposta para continuar.');
   const s = settings.publicView();
-  const useLocal = s.chatProvider === 'local';
   if (s.chatProvider === 'openrouter' && !s.hasKey) {
     status('error', NO_KEY);
     if (!auto) openSettings('geral');
@@ -519,15 +539,20 @@ async function ask({
       await Promise.race([Promise.allSettled([...pendingSegments]), new Promise((r) => setTimeout(r, 8000))]);
       if (controller.signal.aborted) throw new Error('Cancelado.');
     }
-    const target = await chatTarget();
-    // Ferramentas so em perguntas feitas pelo usuario e com modelo na nuvem.
-    const tools = auto || target.local ? [] : mcp.toolsForModel();
+    // Rota: codigo, tela e desafio vao para o modelo forte; fala comum, para o rapido.
+    const lastThem = [...live.lines].reverse().find((l) => l.speaker === 'them');
+    const wantsCode = looksLikeCode(typed) || (answerNow && lastThem && looksLikeCode(lastThem.text));
+    const heavy = withScreen || inTask || wantsCode || (cont && lastAnswer.route === 'strong');
+    const route = heavy ? 'strong' : 'fast';
+    const target = await chatTarget(route);
+    const showEngine = (t) => hybridOn() && broadcast('answer:meta', { id, engine: t.local ? 'local' : 'cloud' });
+    showEngine(target);
     let streamed = false;
     let screenImage = null;
     let usedScreenText = '';
-    const compact = Boolean(s.economy) && !target.local;
+    const compact = Boolean(s.economy);
     // Teto de saida no modo economico: folgado para codigo, curto para fala.
-    const maxTokens = !compact ? undefined : withScreen || inTask || cont ? 2200 : 1100;
+    const maxTokens = !compact ? undefined : heavy || cont ? 2200 : 1100;
     // Para continuar, o modelo precisa do fim do que ja escreveu, sem cortes.
     const turns = cont
       ? [{ q: lastAnswer.request.slice(0, 500), a: lastAnswer.text.slice(-2600) }]
@@ -536,11 +561,11 @@ async function ask({
         : live.turns;
 
     // A tela vai como imagem quando o modelo enxerga, ou como texto lido por OCR quando nao.
-    const run = async (useImage) => {
+    const run = async (useImage, to = target) => {
       let imageDataUrl = null;
       let screenText = '';
       if (withScreen && !screenImage) screenImage = shot || (await grabScreen());
-      if (withScreen && useImage) imageDataUrl = shotToDataUrl(screenImage);
+      if (withScreen && useImage && !to.local) imageDataUrl = shotToDataUrl(screenImage);
       else if (withScreen) {
         screenText = await readScreenText(shotToPng(screenImage));
         if (!screenText) throw new Error('Não encontrei texto nesse trecho da tela.');
@@ -556,14 +581,15 @@ async function ask({
         request,
         imageDataUrl,
         screenText,
-        contextLimit: target.local ? 12000 : compact ? 9000 : 120000,
+        contextLimit: compact ? 9000 : to.local ? 12000 : 120000,
         compact,
       });
       return openrouter.runChat({
-        ...target,
+        ...to,
         messages: imageDataUrl ? messages : textOnly(messages),
         maxTokens,
-        tools,
+        // Ferramentas so em perguntas feitas pelo usuario e com modelo na nuvem.
+        tools: auto || to.local ? [] : mcp.toolsForModel(),
         signal: controller.signal,
         onDelta: (delta) => {
           streamed = true;
@@ -579,8 +605,18 @@ async function ask({
       try {
         return await run(useImage);
       } catch (error) {
+        if (streamed || controller.signal.aborted) throw error;
+        // No modo combinado, limite da nuvem nao trava a resposta: o modelo deste computador assume.
+        if (/\b429\b/.test(error.message) && hybridOn() && !target.local) {
+          const fallback = await localTarget().catch(() => null);
+          if (fallback) {
+            status('info', 'Limite da nuvem atingido: respondendo com o modelo deste computador.');
+            showEngine(fallback);
+            return run(false, fallback);
+          }
+        }
         const wait = openrouter.rateLimitWait(error);
-        if (wait === null || streamed || controller.signal.aborted) throw error;
+        if (wait === null) throw error;
         status('info', `Limite por minuto do serviço atingido. Tentando de novo em ${Math.ceil(wait)} s.`);
         await new Promise((r) => setTimeout(r, wait * 1000 + 400));
         if (controller.signal.aborted) throw error;
@@ -614,7 +650,7 @@ async function ask({
         if (live.turns.length > 20) live.turns.shift();
       }
       // Explicar e conferir nao avancam o plano: continuar essas respostas nao mexe no desafio.
-      lastAnswer = { request, label, text: full, inTask: startsTask || step === 'next' };
+      lastAnswer = { request, label, text: full, inTask: startsTask || step === 'next', route };
     }
     db.addEntry(live.id, { kind: 'question', text: cont ? `${label} (continuação)` : label });
     db.addEntry(live.id, { kind: 'answer', text: full });
@@ -712,6 +748,10 @@ function startSession() {
   // Sobe o Whisper local ja no inicio, para a primeira fala nao esperar o modelo carregar.
   if (s.transcribeProvider === 'local') {
     local.ensure('whisper').catch((error) => status('error', error.message));
+  }
+  // O modelo de respostas local tambem sobe antes, para a primeira resposta nao esperar a carga.
+  if (s.chatProvider === 'local' || hybridOn(s)) {
+    local.ensure('llama').catch((error) => status('error', error.message));
   }
   return sessionState();
 }
