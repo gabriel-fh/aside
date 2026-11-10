@@ -44,18 +44,6 @@ body {
   background: var(--line-strong);
 }
 
-#bar {
-  cursor: grab;
-}
-
-#bar.dragging {
-  cursor: grabbing;
-}
-
-#bar button,
-#bar select {
-  cursor: pointer;
-}
 
 #drag {
   display: flex;
@@ -406,11 +394,4 @@ body {
 
 #sendBtn {
   padding: 8px;
-}
-
-/* O cursor nunca muda sobre a barra e o painel: fica sempre a seta padrao. */
-*,
-*::before,
-*::after {
-  cursor: default !important;
 }

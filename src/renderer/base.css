@@ -31,6 +31,13 @@ body {
   display: none !important;
 }
 
+/* O cursor nunca muda em nenhuma janela do app: fica sempre a seta padrao. */
+*,
+*::before,
+*::after {
+  cursor: default !important;
+}
+
 button,
 input,
 select,
