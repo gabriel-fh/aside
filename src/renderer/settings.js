@@ -3,6 +3,7 @@
   const $ = (id) => document.getElementById(id);
   let settings = null;
   let models = [];
+  const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
   /* ---------- avisos ---------- */
 
@@ -32,6 +33,10 @@
   function showTab(name) {
     for (const button of document.querySelectorAll('.tab')) button.classList.toggle('on', button.dataset.tab === name);
     for (const page of document.querySelectorAll('.page')) page.hidden = page.id !== `tab-${name}`;
+    if (name === 'inicio') {
+      renderHome();
+      loadRecent();
+    }
     if (name === 'historico') loadHistory();
     if (name === 'local') refreshLocal();
     if (name === 'ferramentas') refreshMcp();
@@ -39,6 +44,189 @@
   for (const button of document.querySelectorAll('.tab')) {
     button.addEventListener('click', () => showTab(button.dataset.tab));
   }
+
+  for (const link of document.querySelectorAll('[data-goto]')) {
+    link.addEventListener('click', () => showTab(link.dataset.goto));
+  }
+
+  /* ---------- inicio ---------- */
+
+  let sessionActive = false;
+  let recentCount = 0;
+
+  const MODE_INFO = {
+    reuniao: 'Chamadas e reuniões: acompanha decisões, pendências e perguntas feitas a você.',
+    entrevista: 'Entrevistas: respostas apoiadas no seu currículo e na vaga.',
+    estudo: 'Aulas e problemas: explicações passo a passo e código.',
+    geral: 'Qualquer conversa, sem foco específico.',
+  };
+
+  const prettyKeys = (accel) => String(accel || '').replace(/Control/g, 'Ctrl').replace(/\+/g, ' + ');
+
+  function stepRow(done, number, title, text, actionLabel, onClick) {
+    const row = document.createElement('div');
+    row.className = `step${done ? ' done' : ''}`;
+    const mark = document.createElement('span');
+    mark.className = 'mark';
+    mark.textContent = done ? '✓' : String(number);
+    const body = document.createElement('div');
+    body.className = 'body';
+    const strong = document.createElement('strong');
+    strong.textContent = title;
+    const span = document.createElement('span');
+    span.textContent = text;
+    body.append(strong, span);
+    row.append(mark, body);
+    if (actionLabel) {
+      const action = button(actionLabel, onClick);
+      if (!done) action.className = 'pill';
+      row.append(action);
+    }
+    return row;
+  }
+
+  function renderHome() {
+    if (!settings) return;
+    const ready = Boolean(settings.ready);
+    const mode = settings.assistants.find((a) => a.id === settings.activeAssistantId) || settings.assistants[0];
+    const files = Array.isArray(mode.files) ? mode.files.length : 0;
+    const hasContext = Boolean((mode.context && mode.context.trim()) || files);
+
+    $('homeTitle').textContent = sessionActive
+      ? 'Sessão em andamento'
+      : ready
+        ? 'Pronto para começar'
+        : 'Falta um passo para começar';
+    $('homeSub').textContent = sessionActive
+      ? 'O Aside está ouvindo. Use a barra flutuante para pedir ajuda.'
+      : ready
+        ? `O Aside escuta a conversa, transcreve e ajuda você em tempo real. Modo atual: ${mode.name}.`
+        : 'Conecte uma inteligência artificial para o Aside conseguir transcrever e responder.';
+    $('homeStart').classList.toggle('live', sessionActive);
+    $('homeStartLabel').textContent = sessionActive ? 'Encerrar sessão' : 'Iniciar sessão';
+
+    const local = settings.transcribeProvider === 'local' || settings.chatProvider === 'local';
+    $('homeChecklist').replaceChildren(
+      stepRow(
+        ready,
+        1,
+        'Conectar a inteligência artificial',
+        ready
+          ? local
+            ? 'Usando modelos deste computador.'
+            : 'Chave do OpenRouter salva.'
+          : 'Cole uma chave do OpenRouter (leva 2 minutos) ou configure o uso offline.',
+        ready ? 'Alterar' : 'Conectar',
+        () => showTab('geral')
+      ),
+      stepRow(
+        hasContext,
+        2,
+        `Dar material ao modo ${mode.name} (opcional)`,
+        hasContext
+          ? 'Este modo já tem material de apoio.'
+          : 'Currículo, descrição da vaga, pauta ou anotações deixam as respostas muito mais certeiras.',
+        hasContext ? 'Editar' : 'Adicionar',
+        () => {
+          selectedAssistant = mode.id;
+          showTab('assistentes');
+          renderAssistants(true);
+        }
+      ),
+      stepRow(
+        recentCount > 0,
+        3,
+        'Fazer a primeira sessão',
+        recentCount > 0 ? 'Você já usou o Aside. As conversas ficam no Histórico.' : 'Clique em Iniciar sessão e fale normalmente.',
+        null,
+        null
+      )
+    );
+
+    $('homeModes').replaceChildren(
+      ...settings.assistants.map((a) => {
+        const card = document.createElement('button');
+        const on = a.id === settings.activeAssistantId;
+        card.className = `mode${on ? ' on' : ''}`;
+        const name = document.createElement('strong');
+        name.textContent = a.name;
+        const text = document.createElement('span');
+        text.textContent = MODE_INFO[a.id] || (a.prompt || 'Modo criado por você.').slice(0, 90);
+        card.append(name, text);
+        if (on) {
+          const tag = document.createElement('span');
+          tag.className = 'tag';
+          tag.textContent = 'Em uso';
+          card.append(tag);
+        }
+        card.addEventListener('click', () => guard(() => api.setSettings({ activeAssistantId: a.id })));
+        return card;
+      })
+    );
+
+    const keys = [
+      ['toggle', 'Mostrar ou esconder a barra'],
+      ['session', 'Iniciar ou encerrar a sessão'],
+      ['ask', 'Pedir ajuda agora'],
+      ['screen', 'Analisar a tela'],
+    ];
+    $('homeShortcuts').replaceChildren(
+      ...keys
+        .filter(([key]) => settings.shortcuts[key])
+        .map(([key, label]) => {
+          const row = document.createElement('div');
+          row.className = 'key-row';
+          const text = document.createElement('span');
+          text.textContent = label;
+          const kbd = document.createElement('kbd');
+          kbd.textContent = prettyKeys(settings.shortcuts[key]);
+          row.append(text, kbd);
+          return row;
+        })
+    );
+  }
+
+  async function loadRecent() {
+    const rows = await guard(() => api.historyList(''));
+    if (!rows) return;
+    recentCount = rows.length;
+    const items = rows.slice(0, 3).map((s) => {
+      const row = document.createElement('button');
+      row.className = 'lrow';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = s.title || 'Sessão sem título';
+      const small = document.createElement('small');
+      small.textContent = dateFormat.format(new Date(s.started_at));
+      name.append(small);
+      row.append(name);
+      row.addEventListener('click', () => {
+        showTab('historico');
+        openSession(s.id);
+      });
+      return row;
+    });
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'hint';
+      empty.textContent = 'Nenhuma ainda. Elas aparecem aqui depois da primeira sessão.';
+      items.push(empty);
+    }
+    $('homeRecent').replaceChildren(...items);
+    renderHome();
+  }
+
+  $('homeStart').addEventListener('click', () => {
+    if (!sessionActive && !settings.ready) {
+      toast('Antes, conecte uma inteligência artificial.', true);
+      showTab('geral');
+      $('apiKey').focus();
+      return;
+    }
+    api.toggleSession();
+  });
+  $('homeShowBar').addEventListener('click', () => api.showOverlay());
+  $('openKeys').addEventListener('click', () => api.openKeysPage());
 
   /* ---------- geral ---------- */
 
@@ -498,7 +686,6 @@
   /* ---------- historico ---------- */
 
   let selectedSession = null;
-  const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
   function duration(session) {
     if (!session.ended_at) return 'em andamento';
@@ -644,11 +831,15 @@
     renderAssistants();
     renderShortcuts();
     renderLocal();
+    renderHome();
   }
 
   api.on('settings', apply);
   api.on('status', ({ kind, message }) => toast(message, kind !== 'info'));
-  api.on('session', () => {
+  api.on('session', (state) => {
+    sessionActive = Boolean(state.active);
+    renderHome();
+    if (!sessionActive) loadRecent();
     if (!$('tab-historico').hidden) loadHistory();
   });
   api.on('cmd', (cmd) => {
@@ -657,8 +848,11 @@
 
   api.getSettings().then((next) => {
     apply(next);
-    const initial = location.hash.slice(1);
-    if (initial) showTab(initial);
+    showTab(location.hash.slice(1) || 'inicio');
     loadModels();
+    api.getSession().then((state) => {
+      sessionActive = Boolean(state.active);
+      renderHome();
+    });
   });
 })();

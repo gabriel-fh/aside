@@ -93,10 +93,70 @@ body {
 }
 
 .meters {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 6px;
+  color: var(--muted);
+}
+
+#root.live .meters {
+  display: flex;
+}
+
+.mrow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mrow svg.ic {
+  width: 11px;
+  height: 11px;
+}
+
+#setup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(76, 141, 255, 0.35);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+#setup span {
+  flex: 1;
+}
+
+.empty {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 0 6px;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.empty b {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.empty ol {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
+.empty kbd {
+  font-family: inherit;
+  font-size: 11.5px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
 }
 
 .meter {

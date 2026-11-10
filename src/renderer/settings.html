@@ -13,154 +13,267 @@
   <body>
     <aside id="nav">
       <div class="brand"><img src="../../assets/logo.png" alt="" /><span>Aside</span></div>
-      <button data-tab="geral" class="tab on">Geral</button>
-      <button data-tab="local" class="tab">Local</button>
-      <button data-tab="ferramentas" class="tab">Ferramentas</button>
-      <button data-tab="assistentes" class="tab">Modos</button>
-      <button data-tab="historico" class="tab">Histórico</button>
-      <button data-tab="atalhos" class="tab">Atalhos</button>
+
+      <button data-tab="inicio" class="tab on" title="Início">
+        <svg class="ic" viewBox="0 0 16 16"><path d="M2.5 7.4L8 2.8l5.5 4.6V13a.6.6 0 0 1-.6.6H3.1a.6.6 0 0 1-.6-.6z" /><path d="M6.4 13.6V10h3.2v3.6" /></svg>
+        <span>Início</span>
+      </button>
+      <button data-tab="assistentes" class="tab" title="Modos">
+        <svg class="ic" viewBox="0 0 16 16"><path d="M8 2.4l5.6 3L8 8.4l-5.6-3z" /><path d="M2.4 8.3L8 11.3l5.6-3M2.4 11L8 14l5.6-3" /></svg>
+        <span>Modos</span>
+      </button>
+      <button data-tab="historico" class="tab" title="Histórico">
+        <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6" /><path d="M8 4.9v3.3l2.1 1.3" /></svg>
+        <span>Histórico</span>
+      </button>
+
+      <div class="nav-label">Configurar</div>
+      <button data-tab="geral" class="tab" title="Ajustes">
+        <svg class="ic" viewBox="0 0 16 16"><path d="M2 4.5h6.5M12 4.5h2M2 11.5h2M7.5 11.5H14" /><circle cx="10.2" cy="4.5" r="1.7" /><circle cx="5.8" cy="11.5" r="1.7" /></svg>
+        <span>Ajustes</span>
+      </button>
+      <button data-tab="local" class="tab" title="Usar offline">
+        <svg class="ic" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.5" /><path d="M6.5 2v2M9.5 2v2M6.5 12v2M9.5 12v2M2 6.5h2M2 9.5h2M12 6.5h2M12 9.5h2" /></svg>
+        <span>Usar offline</span>
+      </button>
+      <button data-tab="ferramentas" class="tab" title="Ferramentas">
+        <svg class="ic" viewBox="0 0 16 16"><path d="M6 2v3M10 2v3M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11v3" /></svg>
+        <span>Ferramentas</span>
+      </button>
+      <button data-tab="atalhos" class="tab" title="Atalhos">
+        <svg class="ic" viewBox="0 0 16 16"><rect x="1.8" y="4" width="12.4" height="8" rx="1.5" /><path d="M4.6 7h.01M7 7h.01M9.4 7h.01M11.6 7h.01M5.2 9.6h5.6" /></svg>
+        <span>Atalhos</span>
+      </button>
+
       <div id="toast" hidden></div>
     </aside>
 
     <main>
-      <section id="tab-geral" class="page">
-        <h1>Geral</h1>
-
-        <div class="group">
-          <h2>OpenRouter</h2>
-          <label class="field">
-            <span>Chave de API <em id="keyState"></em></span>
-            <div class="row">
-              <input id="apiKey" type="password" placeholder="sk-or-..." autocomplete="off" />
-              <button id="saveKey" class="pill">Salvar</button>
-              <button id="clearKey" class="ghost">Remover</button>
+      <!-- ============ INICIO ============ -->
+      <section id="tab-inicio" class="page">
+        <div class="wrap">
+          <div class="hero">
+            <div class="hero-text">
+              <h1 id="homeTitle">Pronto para começar</h1>
+              <p id="homeSub">O Aside escuta a conversa, transcreve e ajuda você em tempo real.</p>
             </div>
-            <small>Fica cifrada no cofre de credenciais do Windows. Não sai deste computador, exceto nas chamadas ao OpenRouter.</small>
-          </label>
-          <label class="field">
-            <span>Modelo de respostas</span>
-            <input id="chatModel" list="allModels" spellcheck="false" />
-            <small id="chatModelInfo"></small>
-          </label>
-          <label class="field">
-            <span>Modelo de transcrição (precisa aceitar áudio)</span>
-            <input id="transcribeModel" list="audioModels" spellcheck="false" />
-            <small id="transcribeModelInfo"></small>
-          </label>
-          <datalist id="allModels"></datalist>
-          <datalist id="audioModels"></datalist>
-        </div>
-
-        <div class="group">
-          <h2>Idioma</h2>
-          <label class="field"><span>Idioma falado na conversa</span><input id="language" /></label>
-          <label class="field"><span>Idioma das respostas</span><input id="responseLanguage" /></label>
-          <label class="field">
-            <span>Tradução ao vivo para</span>
-            <input id="translateTo" placeholder="vazio desliga a tradução" />
-          </label>
-        </div>
-
-        <div class="group">
-          <h2>Captura</h2>
-          <label class="check"><input id="captureMic" type="checkbox" /><span>Capturar microfone (Eu)</span></label>
-          <label class="check"><input id="captureSystem" type="checkbox" /><span>Capturar áudio do computador (Eles)</span></label>
-          <label class="check">
-            <input id="speakerMode" type="checkbox" />
-            <span>Estou sem fone: ignorar no microfone o som que sai dos alto-falantes</span>
-          </label>
-        </div>
-
-        <div class="group">
-          <h2>Comportamento</h2>
-          <label class="check"><input id="autoInsights" type="checkbox" /><span>Sugerir resposta sozinho quando fizerem uma pergunta</span></label>
-          <label class="check"><input id="autoSummary" type="checkbox" /><span>Gerar resumo ao encerrar a sessão</span></label>
-          <label class="check">
-            <input id="stealth" type="checkbox" />
-            <span>Modo stealth: as janelas não aparecem em capturas nem em compartilhamento de tela, e saem da barra de tarefas</span>
-          </label>
-          <label class="field">
-            <span>Opacidade do overlay</span>
-            <input id="opacity" type="range" min="0.4" max="1" step="0.02" />
-          </label>
-        </div>
-
-        <div class="group">
-          <h2>Obsidian</h2>
-          <label class="field">
-            <span>Pasta do cofre</span>
-            <div class="row">
-              <input id="obsidianVault" placeholder="vazio: perguntar onde salvar a cada exportação" />
-              <button id="pickVault" class="ghost">Escolher</button>
+            <div class="hero-actions">
+              <button id="homeStart" class="pill big"><span class="dot"></span><span id="homeStartLabel">Iniciar sessão</span></button>
+              <button id="homeShowBar" class="ghost">Mostrar a barra flutuante</button>
             </div>
-            <small>As sessões exportadas vão para a subpasta Aside.</small>
-          </label>
+          </div>
+
+          <h2 class="section">Primeiros passos</h2>
+          <div id="homeChecklist" class="checklist"></div>
+
+          <h2 class="section">Em que situação você está?</h2>
+          <p class="hint tight">O modo muda o jeito de o Aside ajudar. Clique para escolher.</p>
+          <div id="homeModes" class="mode-grid"></div>
+          <p class="hint after-grid">
+            <button class="link" data-goto="assistentes">Criar um modo ou adicionar materiais de apoio</button>
+          </p>
+
+          <div class="two-col">
+            <div>
+              <h2 class="section">Como funciona</h2>
+              <ol class="steps">
+                <li><b>Inicie a sessão.</b> Uma barra pequena fica por cima das outras janelas.</li>
+                <li><b>Converse normalmente.</b> O Aside transcreve você e o som do computador.</li>
+                <li><b>Peça ajuda.</b> Escreva uma pergunta ou use os botões prontos. Quando alguém pergunta algo, ele já sugere uma resposta.</li>
+                <li><b>Encerre.</b> A conversa fica guardada no Histórico, com resumo.</li>
+              </ol>
+            </div>
+            <div>
+              <h2 class="section">Atalhos úteis</h2>
+              <div id="homeShortcuts" class="keys"></div>
+              <h2 class="section">Últimas sessões</h2>
+              <div id="homeRecent" class="rows"></div>
+            </div>
+          </div>
         </div>
       </section>
 
+      <!-- ============ AJUSTES ============ -->
+      <section id="tab-geral" class="page" hidden>
+        <div class="wrap narrow">
+          <h1>Ajustes</h1>
+          <p class="lead">O essencial para o Aside funcionar. O que é opcional fica recolhido.</p>
+
+          <div class="group">
+            <h2>Conexão com a inteligência artificial</h2>
+            <p class="hint tight">
+              O Aside usa o OpenRouter, um serviço que dá acesso a modelos como Claude, Gemini e GPT com uma única chave.
+              Você paga só pelo que usar, direto para eles.
+            </p>
+            <label class="field">
+              <span>Sua chave do OpenRouter <em id="keyState"></em></span>
+              <div class="row">
+                <input id="apiKey" type="password" placeholder="Cole aqui a chave que começa com sk-or-" autocomplete="off" />
+                <button id="saveKey" class="pill">Salvar</button>
+                <button id="clearKey" class="ghost">Remover</button>
+              </div>
+              <small>
+                Não tem chave? <button id="openKeys" class="link">Criar uma no site do OpenRouter</button>. Ela fica cifrada
+                neste computador. Prefere não usar a nuvem? Veja <button class="link" data-goto="local">Usar offline</button>.
+              </small>
+            </label>
+            <details class="adv">
+              <summary>Escolher os modelos (avançado)</summary>
+              <label class="field">
+                <span>Modelo que responde</span>
+                <input id="chatModel" list="allModels" spellcheck="false" />
+                <small id="chatModelInfo"></small>
+              </label>
+              <label class="field">
+                <span>Modelo que transcreve (precisa aceitar áudio)</span>
+                <input id="transcribeModel" list="audioModels" spellcheck="false" />
+                <small id="transcribeModelInfo"></small>
+              </label>
+              <datalist id="allModels"></datalist>
+              <datalist id="audioModels"></datalist>
+            </details>
+          </div>
+
+          <div class="group">
+            <h2>Idioma</h2>
+            <label class="field"><span>Idioma falado na conversa</span><input id="language" /></label>
+            <label class="field"><span>Idioma em que o Aside responde</span><input id="responseLanguage" /></label>
+            <label class="field">
+              <span>Traduzir as falas ao vivo para</span>
+              <input id="translateTo" placeholder="Deixe vazio para não traduzir" />
+            </label>
+          </div>
+
+          <div class="group">
+            <h2>O que o Aside escuta</h2>
+            <label class="check">
+              <input id="captureMic" type="checkbox" />
+              <span><b>Meu microfone</b><small>O que você fala aparece como "Eu".</small></span>
+            </label>
+            <label class="check">
+              <input id="captureSystem" type="checkbox" />
+              <span><b>O som do computador</b><small>A outra pessoa na chamada, um vídeo, uma aula. Aparece como "Eles".</small></span>
+            </label>
+            <label class="check">
+              <input id="speakerMode" type="checkbox" />
+              <span><b>Estou sem fone de ouvido</b><small>Evita que o som das caixas seja transcrito de novo pelo microfone.</small></span>
+            </label>
+          </div>
+
+          <div class="group">
+            <h2>Ajuda automática</h2>
+            <label class="check">
+              <input id="autoInsights" type="checkbox" />
+              <span><b>Sugerir resposta sozinho</b><small>Quando alguém faz uma pergunta, o Aside já propõe o que responder.</small></span>
+            </label>
+            <label class="check">
+              <input id="autoSummary" type="checkbox" />
+              <span><b>Resumir ao encerrar</b><small>Cria título, resumo, decisões e pendências de cada sessão.</small></span>
+            </label>
+          </div>
+
+          <div class="group">
+            <h2>Privacidade e aparência</h2>
+            <label class="check">
+              <input id="stealth" type="checkbox" />
+              <span><b>Modo stealth</b><small>As janelas do Aside não aparecem em capturas nem em compartilhamento de tela, e saem da barra de tarefas.</small></span>
+            </label>
+            <label class="field">
+              <span>Transparência da barra flutuante</span>
+              <input id="opacity" type="range" min="0.4" max="1" step="0.02" />
+            </label>
+          </div>
+
+          <details class="group adv">
+            <summary>Guardar sessões no Obsidian (opcional)</summary>
+            <label class="field">
+              <span>Pasta do cofre</span>
+              <div class="row">
+                <input id="obsidianVault" placeholder="Vazio: o Aside pergunta onde salvar a cada exportação" />
+                <button id="pickVault" class="ghost">Escolher</button>
+              </div>
+              <small>As sessões exportadas vão para a subpasta Aside.</small>
+            </label>
+          </details>
+        </div>
+      </section>
+
+      <!-- ============ OFFLINE ============ -->
       <section id="tab-local" class="page" hidden>
-        <h1>Local</h1>
-        <p class="hint lead">
-          Roda a transcrição e as respostas neste computador, sem chave e sem custo por uso. Os motores vêm das builds
-          oficiais do whisper.cpp e do llama.cpp no GitHub; os modelos, do Hugging Face.
-        </p>
+        <div class="wrap narrow">
+          <h1>Usar offline</h1>
+          <p class="lead">
+            Faz tudo neste computador, sem chave e sem custo por uso. É mais lento e menos preciso que a nuvem. Em cada
+            bloco: instale o motor, baixe um modelo e ligue a opção.
+          </p>
 
-        <div class="group">
-          <h2>Transcrição</h2>
-          <label class="field">
-            <span>Quem transcreve</span>
-            <select id="transcribeProvider">
-              <option value="openrouter">OpenRouter (nuvem)</option>
-              <option value="local">Whisper local</option>
-            </select>
-          </label>
-          <div class="field"><span>Motor whisper.cpp</span><div id="whisperBins" class="rows"></div></div>
-          <div class="field"><span>Modelo</span><div id="whisperModels" class="rows"></div></div>
-          <label class="field">
-            <span>Código do idioma falado (pt, en, es ou auto)</span>
-            <input id="whisperLang" spellcheck="false" />
-          </label>
-        </div>
+          <div class="group">
+            <h2>Transcrição no computador</h2>
+            <label class="field">
+              <span>Quem transcreve as falas</span>
+              <select id="transcribeProvider">
+                <option value="openrouter">A nuvem (OpenRouter)</option>
+                <option value="local">Este computador (Whisper)</option>
+              </select>
+            </label>
+            <div class="field"><span>1. Motor</span><div id="whisperBins" class="rows"></div></div>
+            <div class="field"><span>2. Modelo (maior é melhor e mais lento)</span><div id="whisperModels" class="rows"></div></div>
+            <label class="field">
+              <span>Código do idioma falado (pt, en, es ou auto)</span>
+              <input id="whisperLang" spellcheck="false" />
+            </label>
+          </div>
 
-        <div class="group">
-          <h2>Respostas</h2>
-          <label class="field">
-            <span>Quem responde</span>
-            <select id="chatProvider">
-              <option value="openrouter">OpenRouter (nuvem)</option>
-              <option value="local">Modelo local (llama.cpp)</option>
-            </select>
-            <small>O modelo local não lê imagens: a análise de tela usa só a transcrição.</small>
-          </label>
-          <div class="field"><span>Motor llama.cpp</span><div id="llamaBins" class="rows"></div></div>
-          <div class="field"><span>Modelos neste computador</span><div id="llamaModels" class="rows"></div></div>
-          <div class="field"><span>Sugestões para baixar</span><div id="llamaSuggestions" class="rows"></div></div>
-          <label class="field">
-            <span>Outro modelo GGUF</span>
-            <div class="row">
-              <input id="ggufUrl" placeholder="https://huggingface.co/.../modelo.gguf" spellcheck="false" />
-              <button id="ggufDownload" class="ghost">Baixar</button>
-              <button id="ggufPick" class="ghost">Escolher arquivo</button>
-            </div>
-          </label>
+          <div class="group">
+            <h2>Respostas no computador</h2>
+            <label class="field">
+              <span>Quem responde</span>
+              <select id="chatProvider">
+                <option value="openrouter">A nuvem (OpenRouter)</option>
+                <option value="local">Este computador (llama.cpp)</option>
+              </select>
+              <small>O modelo local não enxerga imagens: a análise de tela usa só a transcrição.</small>
+            </label>
+            <div class="field"><span>1. Motor</span><div id="llamaBins" class="rows"></div></div>
+            <div class="field"><span>2. Modelos já baixados</span><div id="llamaModels" class="rows"></div></div>
+            <div class="field"><span>Sugestões para baixar</span><div id="llamaSuggestions" class="rows"></div></div>
+            <details class="adv">
+              <summary>Usar outro modelo GGUF (avançado)</summary>
+              <label class="field">
+                <span>Endereço do arquivo ou um arquivo seu</span>
+                <div class="row">
+                  <input id="ggufUrl" placeholder="https://huggingface.co/.../modelo.gguf" spellcheck="false" />
+                  <button id="ggufDownload" class="ghost">Baixar</button>
+                  <button id="ggufPick" class="ghost">Escolher arquivo</button>
+                </div>
+              </label>
+            </details>
+          </div>
         </div>
       </section>
 
+      <!-- ============ FERRAMENTAS ============ -->
       <section id="tab-ferramentas" class="page split" hidden>
         <div class="list-col">
-          <div class="list-head"><h1>Ferramentas</h1><button id="newServer" class="pill">Novo</button></div>
-          <p class="hint">Servidores MCP que o modelo pode usar quando você faz uma pergunta.</p>
+          <div class="list-head"><h1>Ferramentas</h1><button id="newServer" class="pill">Nova</button></div>
+          <p class="hint">
+            Conecte serviços externos (arquivos, agenda, busca) por servidores MCP. O Aside pode usá-los ao responder suas
+            perguntas. É um recurso avançado e opcional.
+          </p>
           <div id="serverList" class="list"></div>
         </div>
         <div class="detail-col">
-          <div id="mEmpty" class="hint">Adicione um servidor MCP para dar ferramentas ao assistente.</div>
+          <div id="mEmpty" class="empty-state">
+            <b>Nenhuma ferramenta ainda</b>
+            <span>Clique em Nova para conectar um servidor MCP.</span>
+          </div>
           <div id="mDetail" hidden>
             <label class="field"><span>Nome</span><input id="mName" /></label>
             <label class="field">
               <span>Tipo</span>
               <select id="mType">
-                <option value="stdio">Comando local (stdio)</option>
-                <option value="http">Servidor remoto (HTTP)</option>
+                <option value="stdio">Programa neste computador</option>
+                <option value="http">Servidor na internet</option>
               </select>
             </label>
             <div id="mStdio">
@@ -182,17 +295,21 @@
               <label class="field">
                 <span>Cabeçalhos, um por linha (Nome: valor)</span>
                 <textarea id="mHeaders" rows="3" spellcheck="false"></textarea>
-                <small>Servidores que exigem login por navegador (OAuth) ainda não são suportados: use um token.</small>
+                <small>Servidores que exigem login pelo navegador ainda não são suportados: use um token.</small>
               </label>
             </div>
-            <label class="check"><input id="mEnabled" type="checkbox" /><span>Ativo</span></label>
+            <label class="check">
+              <input id="mEnabled" type="checkbox" />
+              <span><b>Ativa</b><small>Desligada, o Aside não usa esta ferramenta.</small></span>
+            </label>
             <label class="check">
               <input id="mTrust" type="checkbox" />
-              <span>Confiar: executar qualquer ferramenta deste servidor sem pedir confirmação</span>
+              <span><b>Confiar</b><small>Executa qualquer ação desta ferramenta sem pedir sua confirmação.</small></span>
             </label>
-            <div class="row">
+            <div class="row actions">
               <button id="mSave" class="pill">Salvar</button>
               <button id="mReconnect" class="ghost">Reconectar</button>
+              <span class="spacer"></span>
               <button id="mDelete" class="ghost danger">Excluir</button>
             </div>
             <div id="mStatus" class="hint"></div>
@@ -201,33 +318,37 @@
         </div>
       </section>
 
+      <!-- ============ MODOS ============ -->
       <section id="tab-assistentes" class="page split" hidden>
         <div class="list-col">
           <div class="list-head"><h1>Modos</h1><button id="newAssistant" class="pill">Novo</button></div>
-          <p class="hint">Cada modo tem instruções e contexto próprios. Troque de modo pela barra flutuante.</p>
+          <p class="hint">Cada modo é um jeito de ajudar, com instruções e materiais próprios.</p>
           <div id="assistantList" class="list"></div>
         </div>
         <div class="detail-col">
-          <label class="field"><span>Nome</span><input id="aName" /></label>
+          <label class="field"><span>Nome do modo</span><input id="aName" /></label>
           <label class="field">
-            <span>Instruções: como o assistente deve agir neste modo</span>
-            <textarea id="aPrompt" rows="7" spellcheck="false"></textarea>
-          </label>
-          <label class="field">
-            <span>Contexto escrito: o que ele precisa saber</span>
+            <span>O que ele precisa saber</span>
             <textarea
               id="aContext"
-              rows="6"
-              placeholder="Ex.: vaga de desenvolvedor pleno na empresa X, pauta da reunião, pontos que quero cobrir..."
+              rows="5"
+              placeholder="Escreva com suas palavras. Ex.: vaga de desenvolvedor pleno na empresa X, pauta da reunião, pontos que quero cobrir."
             ></textarea>
           </label>
           <div class="field">
-            <span>Arquivos de contexto (PDF, DOCX ou texto)</span>
+            <span>Arquivos de apoio (currículo, descrição da vaga, pauta, anotações)</span>
             <div id="aFiles" class="rows"></div>
-            <div class="row"><button id="aAddFiles" class="ghost add">+ Adicionar arquivos</button></div>
-            <small>O texto dos arquivos é extraído e guardado neste computador. Ele vai junto em cada pergunta deste modo.</small>
+            <div class="row"><button id="aAddFiles" class="ghost add">+ Adicionar PDF, Word ou texto</button></div>
+            <small>O texto dos arquivos fica guardado neste computador e acompanha cada pergunta deste modo.</small>
           </div>
-          <div class="row sticky">
+          <details class="adv" id="aAdvanced">
+            <summary>Como ele deve se comportar (avançado)</summary>
+            <label class="field">
+              <span>Instruções para a IA</span>
+              <textarea id="aPrompt" rows="8" spellcheck="false"></textarea>
+            </label>
+          </details>
+          <div class="row actions sticky">
             <button id="aSave" class="pill">Salvar</button>
             <button id="aUse" class="ghost">Usar este modo</button>
             <span class="spacer"></span>
@@ -236,19 +357,23 @@
         </div>
       </section>
 
+      <!-- ============ HISTORICO ============ -->
       <section id="tab-historico" class="page split" hidden>
         <div class="list-col">
           <div class="list-head"><h1>Histórico</h1></div>
-          <input id="hSearch" type="search" placeholder="Buscar em títulos, resumos e falas" />
+          <input id="hSearch" type="search" placeholder="Buscar por assunto ou por algo que foi dito" />
           <div id="historyList" class="list"></div>
         </div>
         <div class="detail-col">
-          <div id="hEmpty" class="hint">Selecione uma sessão.</div>
+          <div id="hEmpty" class="empty-state">
+            <b>Suas conversas ficam aqui</b>
+            <span>Escolha uma sessão ao lado para ver o resumo, a transcrição e as respostas.</span>
+          </div>
           <div id="hDetail" hidden>
-            <div class="row wrap">
+            <div class="row wrap-row">
               <h2 id="hTitle"></h2>
               <span class="spacer"></span>
-              <button id="hSummarize" class="ghost">Resumir</button>
+              <button id="hSummarize" class="ghost">Gerar resumo</button>
               <button id="hExport" class="ghost">Exportar</button>
               <button id="hDelete" class="ghost danger">Excluir</button>
             </div>
@@ -259,13 +384,17 @@
         </div>
       </section>
 
+      <!-- ============ ATALHOS ============ -->
       <section id="tab-atalhos" class="page" hidden>
-        <h1>Atalhos</h1>
-        <p class="hint">
-          Atalhos globais, no formato do Electron: modificadores e tecla unidos por +, como Control+Shift+Space. Deixe vazio para desativar.
-        </p>
-        <div id="shortcutList" class="group"></div>
-        <div class="row"><button id="saveShortcuts" class="pill">Salvar atalhos</button></div>
+        <div class="wrap narrow">
+          <h1>Atalhos</h1>
+          <p class="lead">
+            Funcionam em qualquer programa, mesmo com o Aside em segundo plano. Para trocar, escreva as teclas unidas por +,
+            como Control+Shift+Space. Deixe vazio para desligar um atalho.
+          </p>
+          <div id="shortcutList" class="group"></div>
+          <div class="row"><button id="saveShortcuts" class="pill">Salvar atalhos</button></div>
+        </div>
       </section>
     </main>
     <script src="md.js"></script>

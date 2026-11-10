@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('aside', {
   setIgnoreMouse: (ignore) => ipcRenderer.send('overlay:ignore', Boolean(ignore)),
   moveBy: (dx, dy) => ipcRenderer.send('overlay:move-by', dx, dy),
   hideOverlay: () => ipcRenderer.send('overlay:hide'),
+  showOverlay: () => ipcRenderer.send('overlay:show'),
+  toggleSession: () => ipcRenderer.send('home:toggle-session'),
+  openKeysPage: () => ipcRenderer.send('open:keys'),
   openSettings: (tab) => ipcRenderer.send('settings:open', tab),
   quit: () => ipcRenderer.send('app:quit'),
 

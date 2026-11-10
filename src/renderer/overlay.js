@@ -26,7 +26,14 @@
     stopBtn: $('stopBtn'),
   };
 
-  const EMPTY_ANSWER = '<p class="hint">Inicie uma sessão para acompanhar a conversa, ou escreva uma pergunta.</p>';
+  const EMPTY_ANSWER = [
+    '<div class="empty"><b>Como usar</b><ol>',
+    '<li>Clique em <kbd>Iniciar</kbd> e converse normalmente.</li>',
+    '<li>Quando alguém fizer uma pergunta, uma sugestão de resposta aparece aqui.</li>',
+    '<li>Precisa de algo? Use os botões abaixo ou escreva sua pergunta.</li>',
+    '</ol></div>',
+  ].join('');
+  const LISTENING = '<div class="empty"><b>Ouvindo a conversa</b><span>As sugestões aparecem aqui. Você também pode perguntar a qualquer momento.</span></div>';
   const EMPTY_TRANSCRIPT = '<p class="hint">A transcrição aparece aqui durante a sessão.</p>';
 
   let settings = null;
@@ -102,6 +109,7 @@
       })
     );
     el.assistant.value = next.activeAssistantId;
+    document.getElementById('setup').hidden = Boolean(next.ready);
 
     const mode = next.assistants.find((a) => a.id === next.activeAssistantId);
     const files = mode && Array.isArray(mode.files) ? mode.files.length : 0;
@@ -124,6 +132,8 @@
     active = Boolean(state.active);
     startedAt = state.startedAt || Date.now();
     el.rec.classList.toggle('live', active);
+    el.root.classList.toggle('live', active);
+    if (!answerText) el.answer.innerHTML = active ? LISTENING : EMPTY_ANSWER;
     clearInterval(clock);
     if (active) {
       tick();
@@ -164,8 +174,8 @@
     if (active || busy) return;
     busy = true;
     try {
-      if (settings.transcribeProvider !== 'local' && !settings.hasKey) {
-        showStatus('Informe a chave do OpenRouter em Ajustes, ou ative a transcrição local.');
+      if (!settings.ready) {
+        showStatus('Antes, conecte uma inteligência artificial.');
         api.openSettings('geral');
         return;
       }
@@ -280,6 +290,7 @@
 
   el.assistant.addEventListener('change', () => api.setSettings({ activeAssistantId: el.assistant.value }));
   el.cfgBtn.addEventListener('click', () => api.openSettings());
+  document.getElementById('setupBtn').addEventListener('click', () => api.openSettings('geral'));
   el.hideBtn.addEventListener('click', () => api.hideOverlay());
 
   api.on('settings', applySettings);

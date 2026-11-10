@@ -10,6 +10,7 @@ const {
   nativeImage,
   screen,
   session: electronSession,
+  shell,
 } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -35,6 +36,7 @@ let tray = null;
 
 // Estado da sessao ao vivo. `lines` e `turns` alimentam o contexto do modelo.
 const live = { id: null, startedAt: null, lines: [], turns: [] };
+let lastReady = null;
 let currentAsk = null;
 let askSeq = 0;
 let autoTimer = null;
@@ -83,6 +85,21 @@ async function translate(text, to) {
   return out.trim();
 }
 
+// Verdadeiro quando ha IA configurada para transcrever e para responder (nuvem ou local).
+function aiReady() {
+  const s = settings.load();
+  const hasKey = Boolean(settings.getApiKey());
+  const state = local.status();
+  const engine = (kind) => state[kind].variants.some((v) => v.selected && v.installed);
+  const whisperOk = engine('whisper') && state.whisper.models.some((m) => m.id === s.whisperModel && m.installed);
+  const llamaOk = engine('llama') && Boolean(s.llamaModel) && fs.existsSync(s.llamaModel);
+  return (s.transcribeProvider === 'local' ? whisperOk : hasKey) && (s.chatProvider === 'local' ? llamaOk : hasKey);
+}
+
+function viewSettings() {
+  return { ...settings.publicView(), ready: aiReady() };
+}
+
 function sessionState() {
   return { active: Boolean(live.id), id: live.id, startedAt: live.startedAt };
 }
@@ -128,8 +145,8 @@ function openSettings(tab) {
   settingsWin = new BrowserWindow({
     width: 1000,
     height: 700,
-    minWidth: 760,
-    minHeight: 520,
+    minWidth: 520,
+    minHeight: 460,
     title: 'Aside',
     backgroundColor: '#0c0c0d',
     autoHideMenuBar: true,
@@ -232,7 +249,9 @@ function registerShortcuts() {
 }
 
 function changeSettings(patch) {
-  const next = settings.update(patch);
+  settings.update(patch);
+  const next = viewSettings();
+  lastReady = next.ready;
   if ('stealth' in patch) applyStealth();
   if ('shortcuts' in patch) registerShortcuts();
   if (next.transcribeProvider !== 'local') local.stop('whisper');
@@ -506,10 +525,12 @@ async function exportSession(id) {
 /* ---------- IPC ---------- */
 
 function registerIpc() {
-  ipcMain.handle('settings:get', () => settings.publicView());
+  ipcMain.handle('settings:get', () => viewSettings());
   ipcMain.handle('settings:set', (_e, patch) => changeSettings(patch || {}));
   ipcMain.handle('key:set', (_e, key) => {
-    const next = settings.setApiKey(key);
+    settings.setApiKey(key);
+    const next = viewSettings();
+    lastReady = next.ready;
     broadcast('settings', next);
     return next;
   });
@@ -593,6 +614,13 @@ function registerIpc() {
   });
   ipcMain.on('overlay:move-by', (_e, dx, dy) => moveOverlay(Number(dx) || 0, Number(dy) || 0));
   ipcMain.on('overlay:hide', () => overlay && overlay.hide());
+  ipcMain.on('overlay:show', () => overlay && overlay.showInactive());
+  ipcMain.on('home:toggle-session', () => {
+    if (!overlay) return;
+    overlay.showInactive();
+    overlay.webContents.send('cmd', { type: 'toggle-session' });
+  });
+  ipcMain.on('open:keys', () => shell.openExternal('https://openrouter.ai/keys'));
   ipcMain.on('settings:open', (_e, tab) => openSettings(tab));
   ipcMain.on('app:quit', () => app.quit());
 }
@@ -609,6 +637,8 @@ async function devShots() {
   const after = overlay.getBounds();
   console.log('[arraste] escala', screen.getPrimaryDisplay().scaleFactor, 'antes', before.width, before.height, 'depois', after.width, after.height);
   openSettings(process.env.ASIDE_SHOT_TAB || undefined);
+  const [shotWidth, shotHeight] = String(process.env.ASIDE_SHOT_SIZE || '').split('x').map(Number);
+  if (shotWidth && shotHeight) settingsWin.setContentSize(shotWidth, shotHeight);
   await new Promise((r) => setTimeout(r, 1800));
   broadcast('session', { active: true, id: 0, startedAt: Date.now() });
   broadcast('transcript', { speaker: 'them', text: 'Qual prazo a gente consegue para a entrega da API?', ts: Date.now() });
@@ -647,7 +677,18 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'win32') app.setAppUserModelId('aside');
     db.open();
     db.closeDangling();
-    local.init({ getSettings: () => settings.load(), onChange: (state) => broadcast('local', state) });
+    local.init({
+      getSettings: () => settings.load(),
+      onChange: (state) => {
+        broadcast('local', state);
+        // Instalar um motor ou baixar um modelo pode deixar o app pronto: avisa as janelas.
+        const ready = aiReady();
+        if (ready !== lastReady) {
+          lastReady = ready;
+          broadcast('settings', viewSettings());
+        }
+      },
+    });
     mcp.init({
       confirm: confirmTool,
       onChange: (state) => settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.send('mcp', state),
@@ -684,7 +725,7 @@ if (!app.requestSingleInstanceLock()) {
       console.error(error);
       app.exit(1);
     });
-    else if (!settings.getApiKey()) openSettings('geral');
+    else openSettings();
   });
 
   // O app continua na bandeja quando as janelas fecham.

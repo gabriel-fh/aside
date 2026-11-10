@@ -21,9 +21,15 @@
         <button id="rec" class="pill" title="Iniciar ou parar a sessão">
           <span class="dot"></span><span id="recLabel">Iniciar</span>
         </button>
-        <div class="meters" title="Níveis de áudio: você em cima, o computador embaixo">
-          <span class="meter"><i id="mMe"></i></span>
-          <span class="meter"><i id="mThem"></i></span>
+        <div class="meters">
+          <div class="mrow" title="Seu microfone">
+            <svg class="ic" viewBox="0 0 16 16"><rect x="6" y="2" width="4" height="7.5" rx="2" /><path d="M3.8 8a4.2 4.2 0 0 0 8.4 0M8 12.2V14" /></svg>
+            <span class="meter"><i id="mMe"></i></span>
+          </div>
+          <div class="mrow" title="Som do computador">
+            <svg class="ic" viewBox="0 0 16 16"><path d="M2.5 6.2h2.3L8 3.5v9L4.8 9.8H2.5z" /><path d="M10.6 5.8a3.2 3.2 0 0 1 0 4.4" /></svg>
+            <span class="meter"><i id="mThem"></i></span>
+          </div>
         </div>
         <span class="sep"></span>
         <select id="assistant" title="Modo ativo"></select>
@@ -32,8 +38,9 @@
           <svg class="ic" viewBox="0 0 16 16"><rect x="1.8" y="2.5" width="12.4" height="8.4" rx="1.4" /><path d="M5.5 13.8h5M8 11v2.8" /></svg>
           Tela
         </button>
-        <button id="cfgBtn" class="ghost icon" title="Ajustes">
+        <button id="cfgBtn" class="ghost" title="Abrir a janela do Aside">
           <svg class="ic" viewBox="0 0 16 16"><path d="M2 4.5h6.5M12 4.5h2M2 11.5h2M7.5 11.5H14" /><circle cx="10.2" cy="4.5" r="1.7" /><circle cx="5.8" cy="11.5" r="1.7" /></svg>
+          Abrir
         </button>
         <button id="foldBtn" class="ghost icon" title="Recolher ou expandir o painel">
           <svg class="ic" viewBox="0 0 16 16"><path d="M4 6.5l4 4 4-4" /></svg>
@@ -53,6 +60,10 @@
           <span id="ctxBadge" hidden></span>
         </div>
         <div id="status" hidden></div>
+        <div id="setup" hidden>
+          <span><b>Falta conectar a inteligência artificial.</b> Sem isso o Aside não transcreve nem responde.</span>
+          <button id="setupBtn" class="pill">Conectar</button>
+        </div>
         <div id="answerView">
           <div id="question" hidden></div>
           <div id="answer" class="md"></div>
