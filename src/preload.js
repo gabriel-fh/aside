@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const invoke = (channel) => (...args) => ipcRenderer.invoke(channel, ...args);
 
-const EVENTS = ['settings', 'session', 'transcript', 'answer:start', 'answer:delta', 'answer:end', 'status', 'cmd'];
+const EVENTS = ['local', 'settings', 'session', 'transcript', 'answer:start', 'answer:delta', 'answer:end', 'status', 'cmd'];
 
 contextBridge.exposeInMainWorld('aside', {
   getSettings: invoke('settings:get'),
@@ -27,6 +27,14 @@ contextBridge.exposeInMainWorld('aside', {
   historySummarize: invoke('history:summarize'),
   historyExport: invoke('history:export'),
   pickFolder: invoke('dialog:folder'),
+
+  localStatus: invoke('local:status'),
+  localInstall: invoke('local:install'),
+  localWhisperModel: invoke('local:whisper-model'),
+  localLlmModel: invoke('local:llm-model'),
+  localDelete: invoke('local:delete'),
+  localCancel: invoke('local:cancel'),
+  localPickGguf: invoke('local:pick-gguf'),
 
   setIgnoreMouse: (ignore) => ipcRenderer.send('overlay:ignore', Boolean(ignore)),
   moveBy: (dx, dy) => ipcRenderer.send('overlay:move-by', dx, dy),

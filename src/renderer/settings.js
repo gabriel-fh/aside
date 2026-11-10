@@ -33,6 +33,7 @@
     for (const button of document.querySelectorAll('.tab')) button.classList.toggle('on', button.dataset.tab === name);
     for (const page of document.querySelectorAll('.page')) page.hidden = page.id !== `tab-${name}`;
     if (name === 'historico') loadHistory();
+    if (name === 'local') refreshLocal();
   }
   for (const button of document.querySelectorAll('.tab')) {
     button.addEventListener('click', () => showTab(button.dataset.tab));
@@ -40,7 +41,17 @@
 
   /* ---------- geral ---------- */
 
-  const TEXT_FIELDS = ['chatModel', 'transcribeModel', 'language', 'responseLanguage', 'translateTo', 'obsidianVault'];
+  const TEXT_FIELDS = [
+    'chatModel',
+    'transcribeModel',
+    'language',
+    'responseLanguage',
+    'translateTo',
+    'obsidianVault',
+    'whisperLang',
+    'transcribeProvider',
+    'chatProvider',
+  ];
   const CHECK_FIELDS = ['captureMic', 'captureSystem', 'speakerMode', 'autoInsights', 'autoSummary', 'stealth'];
 
   function modelInfo(id, needsAudio) {
@@ -109,6 +120,150 @@
     $('audioModels').replaceChildren(...models.filter((m) => m.input.includes('audio')).map(option));
     refreshModelInfo();
   }
+
+  /* ---------- local ---------- */
+
+  let localState = null;
+
+  function button(label, onClick, danger) {
+    const node = document.createElement('button');
+    node.className = `ghost${danger ? ' danger' : ''}`;
+    node.textContent = label;
+    node.addEventListener('click', () => guard(onClick));
+    return node;
+  }
+
+  function lrow(title, note, parts) {
+    const row = document.createElement('div');
+    row.className = 'lrow';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = title;
+    if (note) {
+      const small = document.createElement('small');
+      small.textContent = note;
+      name.append(small);
+    }
+    row.append(name);
+    for (const part of parts) {
+      if (typeof part === 'string') {
+        const state = document.createElement('span');
+        state.className = 'state';
+        state.textContent = part;
+        row.append(state);
+      } else if (part) {
+        row.append(part);
+      }
+    }
+    return row;
+  }
+
+  // Devolve os controles de progresso se o download estiver em andamento.
+  function progressParts(id) {
+    const d = localState.downloads[id];
+    if (!d) return null;
+    const text = d.total
+      ? `Baixando ${Math.floor((d.received / d.total) * 100)}%`
+      : `Baixando ${Math.round(d.received / 1e6)} MB`;
+    return [text, button('Cancelar', () => api.localCancel(id))];
+  }
+
+  function renderBins(kind, target, settingKey) {
+    $(target).replaceChildren(
+      ...localState[kind].variants.map((v) => {
+        const id = `bin:${kind}:${v.id}`;
+        const parts = progressParts(id) || [
+          v.installed && v.selected ? 'Em uso' : null,
+          v.installed && !v.selected ? button('Usar', () => api.setSettings({ [settingKey]: v.id })) : null,
+          button(v.installed ? 'Atualizar' : 'Instalar', async () => {
+            await api.localInstall(kind, v.id);
+            await api.setSettings({ [settingKey]: v.id });
+            toast(`${v.label} instalado.`);
+          }),
+        ];
+        return lrow(v.label, v.version ? `build ${v.version}` : '', parts);
+      })
+    );
+  }
+
+  function renderLocal() {
+    if (!localState || !settings) return;
+    renderBins('whisper', 'whisperBins', 'whisperVariant');
+    renderBins('llama', 'llamaBins', 'llamaVariant');
+
+    $('whisperModels').replaceChildren(
+      ...localState.whisper.models.map((m) => {
+        const inUse = settings.whisperModel === m.id;
+        const parts = progressParts(`whisper:${m.id}`) || [
+          m.installed && inUse ? 'Em uso' : null,
+          m.installed && !inUse ? button('Usar', () => api.setSettings({ whisperModel: m.id })) : null,
+          m.installed
+            ? button('Excluir', () => api.localDelete('whisper', m.id), true)
+            : button('Baixar', async () => {
+                await api.localWhisperModel(m.id);
+                await api.setSettings({ whisperModel: m.id });
+              }),
+        ];
+        return lrow(m.id, `${m.mb} MB, ${m.note}`, parts);
+      })
+    );
+
+    const installed = localState.llama.models;
+    const rows = installed.map((m) => {
+      const inUse = settings.llamaModel === m.path;
+      return lrow(m.name, `${m.mb} MB`, [
+        inUse ? 'Em uso' : button('Usar', () => api.setSettings({ llamaModel: m.path })),
+        button('Excluir', async () => {
+          await api.localDelete('llama', m.name);
+          if (inUse) await api.setSettings({ llamaModel: '' });
+        }, true),
+      ]);
+    });
+    if (settings.llamaModel && !installed.some((m) => m.path === settings.llamaModel)) {
+      rows.push(lrow(settings.llamaModel, 'arquivo externo', ['Em uso']));
+    }
+    if (!rows.length) rows.push(lrow('Nenhum modelo ainda', '', []));
+    $('llamaModels').replaceChildren(...rows);
+
+    $('llamaSuggestions').replaceChildren(
+      ...localState.llama.suggestions
+        .filter((m) => !installed.some((i) => i.name === m.file))
+        .map((m) =>
+          lrow(
+            m.name,
+            `${(m.mb / 1000).toFixed(1)} GB, ${m.note}`,
+            progressParts(`llm:${m.file}`) || [button('Baixar', () => api.localLlmModel(m.url))]
+          )
+        )
+    );
+  }
+
+  async function refreshLocal() {
+    const state = await guard(() => api.localStatus());
+    if (state) {
+      localState = state;
+      renderLocal();
+    }
+  }
+
+  $('ggufDownload').addEventListener('click', () =>
+    guard(async () => {
+      const url = $('ggufUrl').value.trim();
+      if (!url) return toast('Cole o endereço do arquivo .gguf.', true);
+      $('ggufUrl').value = '';
+      await api.localLlmModel(url);
+    })
+  );
+  $('ggufPick').addEventListener('click', () =>
+    guard(async () => {
+      const file = await api.localPickGguf();
+      if (file) await api.setSettings({ llamaModel: file });
+    })
+  );
+  api.on('local', (state) => {
+    localState = state;
+    renderLocal();
+  });
 
   /* ---------- assistentes ---------- */
 
@@ -319,6 +474,7 @@
     fillGeneral();
     renderAssistants();
     renderShortcuts();
+    renderLocal();
   }
 
   api.on('settings', apply);

@@ -109,7 +109,7 @@
     if (active || busy) return;
     busy = true;
     try {
-      if (!settings.hasKey) {
+      if (settings.transcribeProvider !== 'local' && !settings.hasKey) {
         showStatus('Informe a chave do OpenRouter em Ajustes.');
         api.openSettings('geral');
         return;

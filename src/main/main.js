@@ -17,6 +17,7 @@ const path = require('path');
 const settings = require('./settings');
 const db = require('./db');
 const openrouter = require('./openrouter');
+const local = require('./local');
 const { SPEAKER_LABEL, buildChatMessages, buildSummaryMessages } = require('./prompts');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -42,6 +43,40 @@ function broadcast(channel, payload) {
 
 function status(kind, message) {
   broadcast('status', { kind, message });
+}
+
+const NO_KEY = 'Informe a chave do OpenRouter em Ajustes.';
+
+// Para onde vai o chat: OpenRouter ou o llama.cpp local.
+async function chatTarget() {
+  const s = settings.load();
+  if (s.chatProvider === 'local') {
+    return { base: await local.llamaBase(), key: '', model: 'local', local: true };
+  }
+  const key = settings.getApiKey();
+  if (!key) throw new Error(NO_KEY);
+  return { key, model: s.chatModel, local: false };
+}
+
+// O servidor local roda sem leitor de imagem: manda so o texto.
+function textOnly(messages) {
+  return messages.map((m) =>
+    Array.isArray(m.content)
+      ? { ...m, content: m.content.filter((p) => p.type === 'text').map((p) => p.text).join('\n') }
+      : m
+  );
+}
+
+async function translate(text, to) {
+  const target = await chatTarget();
+  const out = await openrouter.complete({
+    ...target,
+    messages: [
+      { role: 'system', content: `Traduza o texto do usuário para ${to}. Responda só com a tradução.` },
+      { role: 'user', content: text },
+    ],
+  });
+  return out.trim();
 }
 
 function sessionState() {
@@ -195,6 +230,8 @@ function changeSettings(patch) {
   const next = settings.update(patch);
   if ('stealth' in patch) applyStealth();
   if ('shortcuts' in patch) registerShortcuts();
+  if (next.transcribeProvider !== 'local') local.stop('whisper');
+  if (next.chatProvider !== 'local') local.stop('llama');
   buildTray();
   broadcast('settings', next);
   return next;
@@ -224,9 +261,9 @@ async function captureScreen() {
 
 async function ask({ text = '', withScreen = false, auto = false } = {}) {
   const s = settings.publicView();
-  const key = settings.getApiKey();
-  if (!key) {
-    status('error', 'Informe a chave do OpenRouter em Ajustes.');
+  const useLocal = s.chatProvider === 'local';
+  if (!useLocal && !s.hasKey) {
+    status('error', NO_KEY);
     if (!auto) openSettings('geral');
     return;
   }
@@ -249,7 +286,9 @@ async function ask({ text = '', withScreen = false, auto = false } = {}) {
 
   let full = '';
   try {
-    const imageDataUrl = withScreen ? await captureScreen() : null;
+    if (withScreen && useLocal) status('info', 'O modelo local não lê imagens: a tela foi ignorada.');
+    const imageDataUrl = withScreen && !useLocal ? await captureScreen() : null;
+    const target = await chatTarget();
     const messages = buildChatMessages({
       assistant,
       responseLanguage: s.responseLanguage,
@@ -259,9 +298,8 @@ async function ask({ text = '', withScreen = false, auto = false } = {}) {
       imageDataUrl,
     });
     full = await openrouter.streamChat({
-      key,
-      model: s.chatModel,
-      messages,
+      ...target,
+      messages: target.local ? textOnly(messages) : messages,
       signal: controller.signal,
       onDelta: (delta) => broadcast('answer:delta', { id, text: delta }),
     });
@@ -302,6 +340,10 @@ function startSession() {
   live.lines = [];
   live.turns = [];
   broadcast('session', sessionState());
+  // Sobe o Whisper local ja no inicio, para a primeira fala nao esperar o modelo carregar.
+  if (s.transcribeProvider === 'local') {
+    local.ensure('whisper').catch((error) => status('error', error.message));
+  }
   return sessionState();
 }
 
@@ -322,12 +364,10 @@ async function stopSession() {
 }
 
 async function summarize(id, lines, turns) {
-  const key = settings.getApiKey();
-  if (!key) throw new Error('Informe a chave do OpenRouter em Ajustes.');
   const s = settings.load();
+  const target = await chatTarget();
   const text = await openrouter.complete({
-    key,
-    model: s.chatModel,
+    ...target,
     messages: buildSummaryMessages({ lines, turns, responseLanguage: s.responseLanguage }),
   });
   const [first, ...rest] = text.trim().split('\n');
@@ -357,19 +397,23 @@ async function handleSegment({ speaker, wavBase64, ts }) {
   if (!live.id) return;
   const sessionId = live.id;
   const s = settings.load();
-  const key = settings.getApiKey();
-  if (!key) {
-    status('error', 'Informe a chave do OpenRouter em Ajustes.');
-    return;
-  }
   try {
-    const { text, translation } = await openrouter.transcribe({
-      key,
-      model: s.transcribeModel,
-      wavBase64,
-      language: s.language,
-      translateTo: s.translateTo,
-    });
+    let text = '';
+    let translation = '';
+    if (s.transcribeProvider === 'local') {
+      text = openrouter.cleanTranscript(await local.transcribe({ wavBase64, language: s.whisperLang }));
+      if (text && s.translateTo) translation = await translate(text, s.translateTo).catch(() => '');
+    } else {
+      const key = settings.getApiKey();
+      if (!key) throw new Error(NO_KEY);
+      ({ text, translation } = await openrouter.transcribe({
+        key,
+        model: s.transcribeModel,
+        wavBase64,
+        language: s.language,
+        translateTo: s.translateTo,
+      }));
+    }
     if (!text) return;
     const line = { speaker, text, translation, ts: ts || Date.now() };
     db.addEntry(sessionId, { kind: 'transcript', speaker, text, extra: translation || null, ts: line.ts });
@@ -472,6 +516,24 @@ function registerIpc() {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  ipcMain.handle('local:status', () => local.status());
+  ipcMain.handle('local:install', (_e, kind, variant) => local.installBinary(kind, variant));
+  ipcMain.handle('local:whisper-model', (_e, id) => local.downloadWhisperModel(id));
+  ipcMain.handle('local:llm-model', async (_e, url) => {
+    const file = await local.downloadLlmModel(url);
+    if (!settings.load().llamaModel) changeSettings({ llamaModel: file });
+    return file;
+  });
+  ipcMain.handle('local:delete', (_e, kind, name) => local.deleteModel(kind, name));
+  ipcMain.handle('local:cancel', (_e, id) => local.cancelDownload(id));
+  ipcMain.handle('local:pick-gguf', async () => {
+    const result = await dialog.showOpenDialog(settingsWin || undefined, {
+      properties: ['openFile'],
+      filters: [{ name: 'Modelo GGUF', extensions: ['gguf'] }],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
   ipcMain.on('overlay:ignore', (_e, ignore) => {
     if (overlay) overlay.setIgnoreMouseEvents(Boolean(ignore), { forward: true });
   });
@@ -486,7 +548,7 @@ function registerIpc() {
 // Uso em desenvolvimento: salva imagens das janelas com dados de exemplo e encerra.
 async function devShots() {
   fs.mkdirSync(SHOT_DIR, { recursive: true });
-  openSettings();
+  openSettings(process.env.ASIDE_SHOT_TAB || undefined);
   await new Promise((r) => setTimeout(r, 1800));
   broadcast('session', { active: true, id: 0, startedAt: Date.now() });
   broadcast('transcript', { speaker: 'them', text: 'Qual prazo a gente consegue para a entrega da API?', ts: Date.now() });
@@ -525,6 +587,7 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'win32') app.setAppUserModelId('aside');
     db.open();
     db.closeDangling();
+    local.init({ getSettings: () => settings.load(), onChange: (state) => broadcast('local', state) });
 
     // Audio do sistema: getDisplayMedia entrega o loopback sem abrir seletor.
     electronSession.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
@@ -540,7 +603,11 @@ if (!app.requestSingleInstanceLock()) {
     registerShortcuts();
     applyStealth();
 
-    if (SHOT_DIR) devShots().catch((error) => {
+    if (process.env.ASIDE_LOCAL_TEST) {
+      require('./dev')
+        .localTest({ local, settings, openrouter, wavPath: process.env.ASIDE_LOCAL_TEST })
+        .finally(() => app.quit());
+    } else if (SHOT_DIR) devShots().catch((error) => {
       console.error(error);
       app.exit(1);
     });
@@ -551,6 +618,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => {});
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
+    local.stopAll();
     if (live.id) db.endSession(live.id);
   });
 }

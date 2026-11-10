@@ -14,6 +14,7 @@
     <aside id="nav">
       <div class="brand"><img src="../../assets/logo.png" alt="" /><span>Aside</span></div>
       <button data-tab="geral" class="tab on">Geral</button>
+      <button data-tab="local" class="tab">Local</button>
       <button data-tab="assistentes" class="tab">Assistentes</button>
       <button data-tab="historico" class="tab">Histórico</button>
       <button data-tab="atalhos" class="tab">Atalhos</button>
@@ -92,6 +93,54 @@
               <button id="pickVault" class="ghost">Escolher</button>
             </div>
             <small>As sessões exportadas vão para a subpasta Aside.</small>
+          </label>
+        </div>
+      </section>
+
+      <section id="tab-local" class="page" hidden>
+        <h1>Local</h1>
+        <p class="hint lead">
+          Roda a transcrição e as respostas neste computador, sem chave e sem custo por uso. Os motores vêm das builds
+          oficiais do whisper.cpp e do llama.cpp no GitHub; os modelos, do Hugging Face.
+        </p>
+
+        <div class="group">
+          <h2>Transcrição</h2>
+          <label class="field">
+            <span>Quem transcreve</span>
+            <select id="transcribeProvider">
+              <option value="openrouter">OpenRouter (nuvem)</option>
+              <option value="local">Whisper local</option>
+            </select>
+          </label>
+          <div class="field"><span>Motor whisper.cpp</span><div id="whisperBins" class="rows"></div></div>
+          <div class="field"><span>Modelo</span><div id="whisperModels" class="rows"></div></div>
+          <label class="field">
+            <span>Código do idioma falado (pt, en, es ou auto)</span>
+            <input id="whisperLang" spellcheck="false" />
+          </label>
+        </div>
+
+        <div class="group">
+          <h2>Respostas</h2>
+          <label class="field">
+            <span>Quem responde</span>
+            <select id="chatProvider">
+              <option value="openrouter">OpenRouter (nuvem)</option>
+              <option value="local">Modelo local (llama.cpp)</option>
+            </select>
+            <small>O modelo local não lê imagens: a análise de tela usa só a transcrição.</small>
+          </label>
+          <div class="field"><span>Motor llama.cpp</span><div id="llamaBins" class="rows"></div></div>
+          <div class="field"><span>Modelos neste computador</span><div id="llamaModels" class="rows"></div></div>
+          <div class="field"><span>Sugestões para baixar</span><div id="llamaSuggestions" class="rows"></div></div>
+          <label class="field">
+            <span>Outro modelo GGUF</span>
+            <div class="row">
+              <input id="ggufUrl" placeholder="https://huggingface.co/.../modelo.gguf" spellcheck="false" />
+              <button id="ggufDownload" class="ghost">Baixar</button>
+              <button id="ggufPick" class="ghost">Escolher arquivo</button>
+            </div>
           </label>
         </div>
       </section>

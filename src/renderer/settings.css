@@ -177,6 +177,55 @@ textarea {
   accent-color: #fff;
 }
 
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.lead {
+  max-width: 640px;
+  margin: -8px 0 16px;
+  line-height: 1.5;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.lrow .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lrow .name small {
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.lrow .state {
+  color: var(--ok);
+  font-size: 12px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
 .danger:hover {
   color: var(--danger);
 }

@@ -3,7 +3,9 @@
 const BASE = 'https://openrouter.ai/api/v1';
 
 function headers(key) {
-  return { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+  const out = { 'Content-Type': 'application/json' };
+  if (key) out.Authorization = `Bearer ${key}`;
+  return out;
 }
 
 async function readError(res) {
@@ -19,7 +21,7 @@ async function readError(res) {
   } catch {
     detail = '';
   }
-  return new Error(`OpenRouter respondeu ${res.status}: ${String(detail).slice(0, 300)}`);
+  return new Error(`O provedor respondeu ${res.status}: ${String(detail).slice(0, 300)}`);
 }
 
 let modelsCache = null;
@@ -86,12 +88,15 @@ function cleanTranscript(text) {
   const t = String(text || '').trim();
   if (!/[\p{L}\p{N}]/u.test(t)) return '';
   if (/^[\[(][^\])]*[\])]\.?$/.test(t)) return '';
+  // Frases que o Whisper inventa em trechos sem fala.
+  if (/amara\.org|legendas pela comunidade/i.test(t)) return '';
   return t;
 }
 
 // Chat em streaming. Chama onDelta a cada pedaco e devolve o texto completo.
-async function streamChat({ key, model, messages, signal, onDelta }) {
-  const res = await fetch(`${BASE}/chat/completions`, {
+// `base` aponta para qualquer servidor compativel com a API da OpenAI (OpenRouter ou llama.cpp local).
+async function streamChat({ base = BASE, key, model, messages, signal, onDelta }) {
+  const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: headers(key),
     signal,
@@ -128,8 +133,8 @@ async function streamChat({ key, model, messages, signal, onDelta }) {
   return full;
 }
 
-async function complete({ key, model, messages, signal }) {
-  return streamChat({ key, model, messages, signal });
+async function complete({ base, key, model, messages, signal }) {
+  return streamChat({ base, key, model, messages, signal });
 }
 
 module.exports = { listModels, transcribe, streamChat, complete, cleanTranscript };
