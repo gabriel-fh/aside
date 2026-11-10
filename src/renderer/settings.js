@@ -254,7 +254,7 @@
     'customBase',
     'customModel',
   ];
-  const CHECK_FIELDS = ['captureMic', 'captureSystem', 'speakerMode', 'autoInsights', 'autoSummary', 'stealth'];
+  const CHECK_FIELDS = ['captureMic', 'captureSystem', 'speakerMode', 'autoInsights', 'autoSummary', 'economy', 'stealth'];
 
   function modelInfo(id, needsAudio) {
     if (!models.length) return '';

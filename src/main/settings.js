@@ -15,6 +15,7 @@ const DEFAULTS = {
   stealth: false,
   autoInsights: true,
   autoSummary: true,
+  economy: true,
   captureMic: true,
   captureSystem: true,
   speakerMode: false,

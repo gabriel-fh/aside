@@ -22,7 +22,16 @@ const local = require('./local');
 const mcp = require('./mcp');
 const { extractFile } = require('./context');
 const { readScreenText } = require('./ocr');
-const { SPEAKER_LABEL, buildChatMessages, buildSummaryMessages } = require('./prompts');
+const {
+  SPEAKER_LABEL,
+  activeJob,
+  buildBriefMessages,
+  buildChatMessages,
+  buildSummaryMessages,
+  briefSlot,
+  contextKey,
+  needsBrief,
+} = require('./prompts');
 
 const ROOT = path.join(__dirname, '..', '..');
 const LOGO = path.join(ROOT, 'assets', 'logo.png');
@@ -270,6 +279,7 @@ function changeSettings(patch) {
   if ('shortcuts' in patch) registerShortcuts();
   if (next.transcribeProvider !== 'local') local.stop('whisper');
   if (next.chatProvider !== 'local') local.stop('llama');
+  ensureBrief();
   buildTray();
   broadcast('settings', next);
   return next;
@@ -439,6 +449,7 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
     const tools = auto || target.local ? [] : mcp.toolsForModel();
     let streamed = false;
     let screenImage = null;
+    const compact = Boolean(s.economy) && !target.local;
 
     // A tela vai como imagem quando o modelo enxerga, ou como texto lido por OCR quando nao.
     const run = async (useImage) => {
@@ -458,11 +469,13 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
         request,
         imageDataUrl,
         screenText,
-        contextLimit: target.local ? 12000 : 120000,
+        contextLimit: target.local ? 12000 : compact ? 9000 : 120000,
+        compact,
       });
       return openrouter.runChat({
         ...target,
         messages: imageDataUrl ? messages : textOnly(messages),
+        maxTokens: compact ? 700 : undefined,
         tools,
         signal: controller.signal,
         onDelta: (delta) => {
@@ -474,15 +487,30 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
       });
     };
 
+    // Limite por minuto do servico: espera o prazo que ele informa e tenta mais uma vez.
+    const attempt = async (useImage) => {
+      try {
+        return await run(useImage);
+      } catch (error) {
+        const wait = openrouter.rateLimitWait(error);
+        if (wait === null || streamed || controller.signal.aborted) throw error;
+        status('info', `Limite por minuto do serviço atingido. Tentando de novo em ${Math.ceil(wait)} s.`);
+        await new Promise((r) => setTimeout(r, wait * 1000 + 400));
+        if (controller.signal.aborted) throw error;
+        return run(useImage);
+      }
+    };
+
     const withImage = withScreen && (await seesImages(target));
     try {
-      full = await run(withImage);
+      full = await attempt(withImage);
     } catch (error) {
       // Provedor recusou a imagem antes de responder: refaz com o texto da tela.
-      if (!withImage || streamed || controller.signal.aborted) throw error;
+      const refused = withImage && !streamed && !controller.signal.aborted && !/\b429\b/.test(error.message);
+      if (!refused) throw error;
       noVision.add(target.model);
       status('info', 'Este modelo não lê imagens: usando o texto da tela.');
-      full = await run(false);
+      full = await attempt(false);
     }
     live.turns.push({ q: request, a: full });
     if (live.turns.length > 20) live.turns.shift();
@@ -494,6 +522,43 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
     broadcast('answer:end', { id, error: aborted ? null : error.message, aborted });
   } finally {
     if (currentAsk === controller) currentAsk = null;
+  }
+}
+
+/* ---------- ficha resumida da vaga ---------- */
+
+let briefBusy = false;
+let briefRetry = null;
+
+// Material de apoio longo (curriculo, vaga, arquivos) e condensado uma unica vez.
+// Assim cada pergunta leva uma ficha curta, e nao o material inteiro.
+async function ensureBrief() {
+  const s = settings.load();
+  if (briefBusy || !s.economy) return;
+  const mode = s.assistants.find((a) => a.id === s.activeAssistantId);
+  if (!needsBrief(mode)) return;
+  briefBusy = true;
+  clearTimeout(briefRetry);
+  const key = contextKey(mode);
+  const slot = briefSlot(mode);
+  const job = activeJob(mode);
+  try {
+    const target = await chatTarget();
+    const text = (await openrouter.complete({ ...target, messages: buildBriefMessages(mode), maxTokens: 650 })).trim();
+    if (!text) throw new Error('O modelo devolveu uma ficha vazia.');
+    // Grava no modo certo, mesmo que as configuracoes tenham mudado no meio do caminho.
+    const assistants = settings.load().assistants.map((a) =>
+      a.id === mode.id ? { ...a, briefs: { ...(a.briefs || {}), [slot]: { key, text } } } : a
+    );
+    settings.update({ assistants });
+    broadcast('settings', viewSettings());
+    status('info', `Ficha resumida de "${job ? job.title : mode.name}" pronta: as perguntas ficam mais leves.`);
+  } catch (error) {
+    // Sem ficha o app segue funcionando com o material cortado. Tenta de novo mais tarde.
+    const wait = openrouter.rateLimitWait(error);
+    briefRetry = setTimeout(ensureBrief, (wait === null ? 90 : wait + 2) * 1000);
+  } finally {
+    briefBusy = false;
   }
 }
 
@@ -892,6 +957,7 @@ if (!app.requestSingleInstanceLock()) {
       onChange: (state) => settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.send('mcp', state),
     });
     mcp.sync(settings.getMcpServers());
+    setTimeout(ensureBrief, 4000);
 
     // Audio do sistema: getDisplayMedia entrega o loopback sem abrir seletor.
     electronSession.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {

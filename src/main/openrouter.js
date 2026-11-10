@@ -95,8 +95,10 @@ function cleanTranscript(text) {
 }
 
 // Uma rodada de chat em streaming. Devolve o texto e as chamadas de ferramenta pedidas pelo modelo.
-async function streamTurn({ base = BASE, key, model, messages, tools, signal, onDelta }) {
+async function streamTurn({ base = BASE, key, model, messages, tools, signal, onDelta, maxTokens }) {
   const body = { model, messages, stream: true };
+  // Teto de saida: provedores com limite por minuto contam esse teto no pedido.
+  if (maxTokens) body.max_tokens = maxTokens;
   if (tools && tools.length) body.tools = tools;
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
@@ -147,12 +149,12 @@ async function streamTurn({ base = BASE, key, model, messages, tools, signal, on
 }
 
 // Chat completo: repete rodadas enquanto o modelo pedir ferramentas. Devolve todo o texto gerado.
-async function runChat({ base, key, model, messages, tools, signal, onDelta, callTool, onTool, maxRounds = 6 }) {
+async function runChat({ base, key, model, messages, tools, signal, onDelta, callTool, onTool, maxTokens, maxRounds = 6 }) {
   const history = messages.slice();
   let full = '';
   for (let round = 0; round < maxRounds; round++) {
     const useTools = round < maxRounds - 1 ? tools : undefined;
-    const turn = await streamTurn({ base, key, model, messages: history, tools: useTools, signal, onDelta });
+    const turn = await streamTurn({ base, key, model, messages: history, tools: useTools, signal, onDelta, maxTokens });
     full += turn.text;
     if (!turn.toolCalls.length || !callTool) break;
     history.push({ role: 'assistant', content: turn.text || null, tool_calls: turn.toolCalls });
@@ -174,8 +176,27 @@ async function streamChat(options) {
   return (await streamTurn(options)).text;
 }
 
-async function complete({ base, key, model, messages, signal }) {
-  return streamChat({ base, key, model, messages, signal });
+async function complete({ base, key, model, messages, signal, maxTokens }) {
+  return streamChat({ base, key, model, messages, signal, maxTokens });
 }
 
-module.exports = { listModels, transcribe, streamTurn, runChat, streamChat, complete, cleanTranscript };
+// Se o erro for limite por minuto (429) com prazo curto, devolve quantos segundos esperar. Senao, null.
+function rateLimitWait(error) {
+  const message = String((error && error.message) || '');
+  if (!/\b429\b/.test(message)) return null;
+  const match = message.match(/try again in (?:(\d+)m)?([\d.]+)\s*s/i);
+  if (!match) return null;
+  const seconds = Number(match[1] || 0) * 60 + Number(match[2]);
+  return Number.isFinite(seconds) && seconds <= 45 ? seconds : null;
+}
+
+module.exports = {
+  listModels,
+  transcribe,
+  streamTurn,
+  runChat,
+  streamChat,
+  complete,
+  cleanTranscript,
+  rateLimitWait,
+};
