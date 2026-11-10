@@ -248,12 +248,24 @@
     el.answer.scrollTop = el.answer.scrollHeight;
   }
 
-  api.on('answer:start', ({ id, question }) => {
+  const contBtn = document.getElementById('contBtn');
+  const taskBar = document.getElementById('taskBar');
+  const chips = document.getElementById('chips');
+
+  api.on('answer:start', ({ id, question, append }) => {
     answerId = id;
-    answerText = '';
+    contBtn.hidden = true;
     el.question.textContent = question;
     el.question.hidden = false;
-    el.answer.innerHTML = '<p class="hint">Pensando...</p>';
+    if (append && answerText) {
+      // Continuacao: mantem o que ja foi escrito. Se parou dentro de um bloco de codigo, fecha o bloco
+      // para a continuacao poder reabri-lo.
+      const fences = (answerText.match(/^\s*```/gm) || []).length;
+      answerText += fences % 2 ? '\n```\n' : '\n';
+    } else {
+      answerText = '';
+      el.answer.innerHTML = '<p class="hint">Pensando...</p>';
+    }
     el.stopBtn.hidden = false;
     setFolded(false);
     showView('answer');
@@ -266,9 +278,11 @@
       requestAnimationFrame(renderAnswer);
     }
   });
-  api.on('answer:end', ({ id, error, aborted }) => {
+  api.on('answer:end', ({ id, error, aborted, truncated }) => {
     if (id !== answerId) return;
     el.stopBtn.hidden = true;
+    // Resposta que bateu no teto de tamanho: oferece continuar de onde parou.
+    contBtn.hidden = !truncated;
     if (error) showStatus(error);
     if (!answerText && (error || aborted)) {
       el.answer.innerHTML = '<p class="hint">Sem resposta.</p>';
@@ -281,6 +295,24 @@
     api.ask({ answerNow: true });
   }
   document.getElementById('answerBtn').addEventListener('click', answerNow);
+
+  contBtn.addEventListener('click', () => api.ask({ cont: true }));
+
+  // Desafio em etapas: com um desafio fixado, os botoes de passo ocupam o lugar dos atalhos comuns.
+  function applyTask(state) {
+    taskBar.hidden = !state.active;
+    chips.hidden = state.active;
+    const n = state.steps;
+    document.getElementById('taskLabel').textContent =
+      `Desafio em etapas: ${n} ${n === 1 ? 'parte entregue' : 'partes entregues'}`;
+  }
+  for (const button of taskBar.querySelectorAll('[data-step]')) {
+    button.addEventListener('click', () => api.ask({ step: button.dataset.step }));
+  }
+  document.getElementById('taskCheck').addEventListener('click', () => api.askCheck());
+  document.getElementById('taskEnd').addEventListener('click', () => api.clearTask());
+  api.on('task', applyTask);
+  api.getTask().then(applyTask);
 
   function takeQuestion() {
     const text = el.q.value.trim();

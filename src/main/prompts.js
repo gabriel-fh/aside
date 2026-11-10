@@ -56,19 +56,41 @@ const INTERVIEW_TYPES = {
   },
   tecnica_conversa: {
     label: 'Técnica: bate-papo',
-    guide: 'Perguntas técnicas respondidas falando. Dê a resposta direta, depois o porquê, e ligue a um projeto do currículo quando houver.',
+    guide: [
+      'Perguntas técnicas respondidas falando.',
+      'Para "como você faria X": a resposta direta em 1 frase, depois a abordagem em 2 a 4 passos, uma troca que pesou na decisão e, se houver no material, um projeto em que fez algo parecido.',
+      'Para "qual a diferença entre A e B": uma definição curta de cada um e quando usar cada um.',
+      'Para "me conta de um problema difícil": situação, ação e resultado, com número quando houver.',
+      'Se pedirem um trecho de código, entregue um exemplo curto e diga o que explicar sobre ele.',
+    ].join(' '),
   },
   tecnica_codigo: {
     label: 'Técnica: código ao vivo',
-    guide: 'O usuário resolve um problema programando. Ajude a entender o enunciado, proponha a abordagem, mostre o código em passos pequenos, cite complexidade e casos de borda, e sugira o que dizer em voz alta enquanto programa.',
+    guide: [
+      'O usuário resolve um problema programando enquanto o entrevistador observa.',
+      'É comum em front-end e mobile: componente com estado, lista vinda de API com carregando e erro, formulário com validação, busca com espera entre teclas, hook próprio, paginação, manipulação de listas e objetos.',
+      'Antes do código, diga em 1 ou 2 linhas o que foi pedido e o que vale confirmar com o entrevistador.',
+      'Use a linguagem e o framework do enunciado ou da vaga. Comece pela versão mais simples que funciona e evolua em passos pequenos.',
+      'Em cada passo, diga em 1 frase o que falar em voz alta. Ao final, cite casos de borda e como testar.',
+    ].join(' '),
   },
   desafio: {
     label: 'Desafio técnico',
-    guide: 'O usuário apresenta ou discute um desafio feito em casa ou um problema maior. Ajude a explicar decisões, trocas feitas, o que melhoraria com mais tempo e como testar.',
+    guide: [
+      'Um problema maior: feito em casa e apresentado agora, ou construído ao vivo em etapas.',
+      'Se for para construir, quebre em passos pequenos e entregue um por vez.',
+      'Se for para apresentar, ajude a explicar a estrutura, as decisões, as trocas feitas, o que melhoraria com mais tempo e como testar.',
+      'Em perguntas sobre o código, responda pelo porquê da escolha e cite uma alternativa.',
+    ].join(' '),
   },
   misto: {
     label: 'Mista: bate-papo técnico e código',
-    guide: 'Alterna perguntas faladas e trechos de código. Perceba pelo contexto qual é o caso: resposta falada curta para conceito, passos de código para problema prático.',
+    guide: [
+      'Alterna perguntas faladas e trechos de código. Perceba pelo pedido qual é o caso.',
+      'Pergunta de conceito ou "como você faria": resposta falada curta, em 1 frase direta e 2 a 4 passos.',
+      'Exercício prático: entendimento em 1 ou 2 linhas, depois o código em passos pequenos, com o que dizer em voz alta.',
+      'Use a linguagem e o framework do enunciado ou da vaga.',
+    ].join(' '),
   },
   gestor: {
     label: 'Com gestor ou time',
@@ -175,6 +197,8 @@ function buildChatMessages({
   screenText,
   contextLimit = 120000,
   compact = false,
+  taskText = '',
+  rawTurns = false,
 }) {
   const system = [
     BASE_PROMPT,
@@ -187,14 +211,17 @@ function buildChatMessages({
 
   // Modo economico: menos historico e menos falas antigas, para caber em limites por minuto apertados.
   const messages = [{ role: 'system', content: system }];
+  // `rawTurns` preserva as trocas como vieram: usado para continuar uma resposta cortada.
+  const trim = compact && !rawTurns;
   for (const t of turns.slice(compact ? -2 : -4)) {
-    messages.push({ role: 'user', content: compact ? t.q.slice(0, 300) : t.q });
-    messages.push({ role: 'assistant', content: compact ? t.a.slice(0, 500) : t.a });
+    messages.push({ role: 'user', content: trim ? t.q.slice(0, 300) : t.q });
+    messages.push({ role: 'assistant', content: trim ? t.a.slice(0, 500) : t.a });
   }
 
   const transcript = compact ? formatTranscript(lines, 14).slice(-2600) : formatTranscript(lines);
   const text = [
     transcript ? `Transcrição recente:\n${transcript}` : '',
+    taskText,
     screenText ? `Texto que está na tela do usuário agora (lido por OCR, pode ter pequenos erros):\n${screenText}` : '',
     `Pedido: ${request}`,
   ]

@@ -71,8 +71,16 @@
         <div id="answerView">
           <div id="question" hidden></div>
           <div id="answer" class="md"></div>
+          <button id="contBtn" class="chip strong" hidden>Continuar a resposta</button>
         </div>
         <div id="transcript" hidden></div>
+        <div id="taskBar" hidden>
+          <span id="taskLabel">Desafio em etapas</span>
+          <button class="chip strong" data-step="next" title="Entrega o próximo passo do plano">Próximo passo</button>
+          <button class="chip" data-step="explain" title="Como explicar o último passo ao entrevistador">Explicar este passo</button>
+          <button class="chip" id="taskCheck" title="Recorte o seu código para o Aside conferir">Conferir meu código</button>
+          <button class="chip" id="taskEnd" title="Sai do desafio atual">Encerrar desafio</button>
+        </div>
         <div id="chips">
           <button class="chip" data-ask="O que é mais útil eu dizer agora?">O que dizer agora?</button>
           <button class="chip" data-ask="Resuma a conversa até aqui em poucos pontos.">Resumir até aqui</button>

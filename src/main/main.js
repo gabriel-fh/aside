@@ -409,7 +409,76 @@ async function askRegion(text) {
 
 /* ---------- perguntas ao modelo ---------- */
 
-async function ask({ text = '', withScreen = false, auto = false, answerNow = false, shot = null } = {}) {
+// Desafio em andamento: o enunciado e o que ja foi entregue, para seguir um passo por vez.
+let task = null;
+// Ultima resposta dada, para poder continuar de onde parou quando ela e cortada.
+let lastAnswer = null;
+
+const taskState = () => ({ active: Boolean(task), steps: task ? task.answers.length : 0 });
+
+function clearTask() {
+  task = null;
+  broadcast('task', taskState());
+}
+
+// O que o modelo precisa saber do desafio para entregar o passo seguinte.
+function taskContext() {
+  if (!task) return '';
+  const parts = [
+    task.statement
+      ? `Desafio fixado (enunciado lido da tela):\n${task.statement.slice(0, 3500)}`
+      : 'Desafio fixado: o enunciado estava em uma imagem. O plano abaixo descreve o que foi pedido.',
+  ];
+  const [first, ...rest] = task.answers;
+  if (first) parts.push(`Plano e primeiro passo, já entregues:\n${first.slice(0, 2600)}`);
+  if (rest.length > 2) parts.push(`(${rest.length - 2} passos intermediários já foram entregues e não aparecem aqui.)`);
+  rest.slice(-2).forEach((answer, index, list) => {
+    const number = task.answers.length - list.length + index + 1;
+    parts.push(`Passo ${number}, já entregue:\n${answer.slice(0, 2000)}`);
+  });
+  return parts.join('\n\n');
+}
+
+const REQUESTS = {
+  answerNow:
+    'Responda agora à última pergunta ou fala de Eles. Comece pela resposta que eu posso dizer em voz alta, em 1 a 3 frases, na primeira pessoa. Só depois, se ajudar, acrescente detalhes curtos. Se pediram código, entregue o trecho completo.',
+  general: 'Com base na conversa até aqui, o que é mais útil eu saber ou dizer agora?',
+  screen: [
+    'Analise o que está na tela.',
+    'Se for uma pergunta ou algo pequeno, responda direto.',
+    'Se for um exercício ou desafio de código:',
+    '1. Diga em 1 ou 2 linhas o que está sendo pedido e o que vale confirmar com o entrevistador.',
+    '2. Se a solução couber em cerca de 40 linhas, entregue-a completa, com 1 frase do que dizer em voz alta.',
+    '3. Se for maior, não escreva tudo de uma vez: liste um plano numerado de passos pequenos e entregue só o código do passo 1. Termine com a linha "Próximo: passo 2, <o que é>".',
+  ].join('\n'),
+  next: [
+    'Siga o desafio fixado. Entregue somente o próximo passo do plano que ainda não foi entregue.',
+    'Mostre o código só desse passo e diga onde ele encaixa no que já existe. Acrescente 1 frase do que dizer em voz alta.',
+    'Não repita código de passos anteriores.',
+    'Termine com "Próximo: passo N, <o que é>". Se o plano acabou, escreva "Desafio concluído" e cite 2 casos de borda e como testar.',
+  ].join('\n'),
+  explain:
+    'Explique o último passo entregue do desafio fixado, do jeito que eu explicaria ao entrevistador: o que o código faz, por que essa escolha e uma alternativa. Curto, sem repetir o código inteiro.',
+  check: [
+    'O texto da tela é o meu código atual no desafio fixado.',
+    'Compare com o plano. Aponte erros objetivos, com o trecho exato e a correção.',
+    'Se estiver certo, diga isso em 1 frase. Em qualquer caso, diga qual é o próximo ajuste.',
+  ].join('\n'),
+  cont: 'Continue exatamente de onde a sua resposta anterior parou, sem repetir nada do que já foi escrito e sem introdução. Se parou no meio de um bloco de código, abra o bloco de novo com a mesma linguagem e continue da linha seguinte.',
+};
+
+async function ask({
+  text = '',
+  withScreen = false,
+  auto = false,
+  answerNow = false,
+  shot = null,
+  step = null,
+  cont = false,
+} = {}) {
+  // `step` segue um desafio fixado: 'next', 'explain' ou 'check'. `cont` continua a ultima resposta.
+  if (step && !task) return status('error', 'Não há desafio em andamento. Use Tela ou Recorte no enunciado.');
+  if (cont && !lastAnswer) return status('error', 'Não há resposta para continuar.');
   const s = settings.publicView();
   const useLocal = s.chatProvider === 'local';
   if (s.chatProvider === 'openrouter' && !s.hasKey) {
@@ -423,19 +492,25 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
   const id = ++askSeq;
 
   const typed = String(text || '').trim();
-  const request =
-    typed ||
-    (withScreen
-      ? 'Analise o que está na tela e me ajude com isso.'
-      : answerNow
-        ? 'Responda agora à última pergunta ou fala de Eles. Comece pela resposta que eu posso dizer em voz alta, em 1 a 3 frases, na primeira pessoa. Só depois, se ajudar, acrescente detalhes curtos.'
-        : 'Com base na conversa até aqui, o que é mais útil eu saber ou dizer agora?');
-  const label =
-    typed || (withScreen ? (shot ? 'Análise do recorte' : 'Análise da tela') : answerNow ? 'Responder agora' : 'O que vem agora?');
+  const request = cont
+    ? REQUESTS.cont
+    : step
+      ? REQUESTS[step]
+      : typed || (withScreen ? REQUESTS.screen : answerNow ? REQUESTS.answerNow : REQUESTS.general);
+  const STEP_LABEL = { next: 'Próximo passo', explain: 'Explicação do passo', check: 'Conferência do meu código' };
+  const label = cont
+    ? lastAnswer.label
+    : step
+      ? STEP_LABEL[step]
+      : typed ||
+        (withScreen ? (shot ? 'Análise do recorte' : 'Análise da tela') : answerNow ? 'Responder agora' : 'O que vem agora?');
   const assistant = s.assistants.find((a) => a.id === s.activeAssistantId) || s.assistants[0];
+  // Um pedido novo sobre a tela vira o desafio fixado. Os passos seguintes continuam esse desafio.
+  const startsTask = withScreen && !step && !cont;
+  const inTask = Boolean(step) || (cont && lastAnswer.inTask);
 
   if (overlay && !overlay.isVisible() && !auto) overlay.showInactive();
-  broadcast('answer:start', { id, question: label, auto });
+  broadcast('answer:start', { id, question: label, auto, append: cont });
 
   let full = '';
   try {
@@ -449,7 +524,16 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
     const tools = auto || target.local ? [] : mcp.toolsForModel();
     let streamed = false;
     let screenImage = null;
+    let usedScreenText = '';
     const compact = Boolean(s.economy) && !target.local;
+    // Teto de saida no modo economico: folgado para codigo, curto para fala.
+    const maxTokens = !compact ? undefined : withScreen || inTask || cont ? 2200 : 1100;
+    // Para continuar, o modelo precisa do fim do que ja escreveu, sem cortes.
+    const turns = cont
+      ? [{ q: lastAnswer.request.slice(0, 500), a: lastAnswer.text.slice(-2600) }]
+      : inTask || startsTask
+        ? []
+        : live.turns;
 
     // A tela vai como imagem quando o modelo enxerga, ou como texto lido por OCR quando nao.
     const run = async (useImage) => {
@@ -461,11 +545,14 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
         screenText = await readScreenText(shotToPng(screenImage));
         if (!screenText) throw new Error('Não encontrei texto nesse trecho da tela.');
       }
+      usedScreenText = screenText;
       const messages = buildChatMessages({
         assistant,
         responseLanguage: s.responseLanguage,
-        lines: live.lines,
-        turns: live.turns,
+        lines: inTask ? live.lines.slice(-6) : live.lines,
+        turns,
+        rawTurns: cont,
+        taskText: inTask ? taskContext() : '',
         request,
         imageDataUrl,
         screenText,
@@ -475,7 +562,7 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
       return openrouter.runChat({
         ...target,
         messages: imageDataUrl ? messages : textOnly(messages),
-        maxTokens: compact ? 700 : undefined,
+        maxTokens,
         tools,
         signal: controller.signal,
         onDelta: (delta) => {
@@ -502,21 +589,37 @@ async function ask({ text = '', withScreen = false, auto = false, answerNow = fa
     };
 
     const withImage = withScreen && (await seesImages(target));
+    let result;
     try {
-      full = await attempt(withImage);
+      result = await attempt(withImage);
     } catch (error) {
       // Provedor recusou a imagem antes de responder: refaz com o texto da tela.
       const refused = withImage && !streamed && !controller.signal.aborted && !/\b429\b/.test(error.message);
       if (!refused) throw error;
       noVision.add(target.model);
       status('info', 'Este modelo não lê imagens: usando o texto da tela.');
-      full = await attempt(false);
+      result = await attempt(false);
     }
-    live.turns.push({ q: request, a: full });
-    if (live.turns.length > 20) live.turns.shift();
-    db.addEntry(live.id, { kind: 'question', text: label });
+    full = result.text;
+
+    if (cont) {
+      // A continuacao emenda na resposta anterior, inclusive dentro do desafio.
+      lastAnswer.text += full;
+      if (lastAnswer.inTask && task && task.answers.length) task.answers[task.answers.length - 1] = lastAnswer.text;
+    } else {
+      if (startsTask) task = { statement: usedScreenText, answers: [full] };
+      else if (step === 'next') task.answers.push(full);
+      else if (!inTask) {
+        live.turns.push({ q: request, a: full });
+        if (live.turns.length > 20) live.turns.shift();
+      }
+      // Explicar e conferir nao avancam o plano: continuar essas respostas nao mexe no desafio.
+      lastAnswer = { request, label, text: full, inTask: startsTask || step === 'next' };
+    }
+    db.addEntry(live.id, { kind: 'question', text: cont ? `${label} (continuação)` : label });
     db.addEntry(live.id, { kind: 'answer', text: full });
-    broadcast('answer:end', { id });
+    broadcast('answer:end', { id, truncated: result.truncated });
+    broadcast('task', taskState());
   } catch (error) {
     const aborted = controller.signal.aborted;
     broadcast('answer:end', { id, error: aborted ? null : error.message, aborted });
@@ -793,6 +896,16 @@ function registerIpc() {
   ipcMain.handle('ask:region', (_e, text) => {
     askRegion(String(text || ''));
   });
+  // Durante um desafio: recorta o codigo atual do usuario e pede a conferencia.
+  ipcMain.handle('ask:check', () => {
+    if (!task) return status('error', 'Não há desafio em andamento.');
+    pickRegion()
+      .then((shot) => shot && ask({ step: 'check', withScreen: true, shot }))
+      .catch((error) => status('error', error.message));
+    return undefined;
+  });
+  ipcMain.handle('task:get', () => taskState());
+  ipcMain.handle('task:clear', () => clearTask());
   ipcMain.handle('ask:cancel', () => {
     if (currentAsk) currentAsk.abort();
   });

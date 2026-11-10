@@ -112,6 +112,7 @@ async function streamTurn({ base = BASE, key, model, messages, tools, signal, on
   const calls = [];
   let buffer = '';
   let text = '';
+  let finishReason = '';
   for await (const chunk of res.body) {
     buffer += decoder.decode(chunk, { stream: true });
     let nl;
@@ -128,7 +129,9 @@ async function streamTurn({ base = BASE, key, model, messages, tools, signal, on
         continue;
       }
       if (json.error) throw new Error(json.error.message || 'Erro do provedor');
-      const delta = json.choices && json.choices[0] && json.choices[0].delta;
+      const choice = json.choices && json.choices[0];
+      if (choice && choice.finish_reason) finishReason = choice.finish_reason;
+      const delta = choice && choice.delta;
       if (!delta) continue;
       if (delta.content) {
         text += delta.content;
@@ -145,17 +148,20 @@ async function streamTurn({ base = BASE, key, model, messages, tools, signal, on
     }
   }
   const toolCalls = calls.filter(Boolean).map((call, i) => ({ ...call, id: call.id || `call_${i}` }));
-  return { text, toolCalls };
+  return { text, toolCalls, finishReason };
 }
 
-// Chat completo: repete rodadas enquanto o modelo pedir ferramentas. Devolve todo o texto gerado.
+// Chat completo: repete rodadas enquanto o modelo pedir ferramentas.
+// Devolve { text, truncated }: `truncated` indica que a resposta bateu no teto de saida.
 async function runChat({ base, key, model, messages, tools, signal, onDelta, callTool, onTool, maxTokens, maxRounds = 6 }) {
   const history = messages.slice();
   let full = '';
+  let truncated = false;
   for (let round = 0; round < maxRounds; round++) {
     const useTools = round < maxRounds - 1 ? tools : undefined;
     const turn = await streamTurn({ base, key, model, messages: history, tools: useTools, signal, onDelta, maxTokens });
     full += turn.text;
+    truncated = turn.finishReason === 'length';
     if (!turn.toolCalls.length || !callTool) break;
     history.push({ role: 'assistant', content: turn.text || null, tool_calls: turn.toolCalls });
     for (const call of turn.toolCalls) {
@@ -169,7 +175,7 @@ async function runChat({ base, key, model, messages, tools, signal, onDelta, cal
       if (onDelta) onDelta('\n\n');
     }
   }
-  return full;
+  return { text: full, truncated };
 }
 
 async function streamChat(options) {

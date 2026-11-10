@@ -359,6 +359,36 @@ body {
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
+.chip.strong {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.chip.strong:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+#contBtn {
+  align-self: flex-start;
+}
+
+#taskBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+#taskLabel {
+  width: 100%;
+  color: #a9c8ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .chip:hover {
   background: var(--accent-soft);
   border-color: rgba(76, 141, 255, 0.5);
