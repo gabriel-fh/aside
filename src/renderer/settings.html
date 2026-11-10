@@ -134,6 +134,46 @@
             </details>
           </div>
 
+          <details class="group adv" id="customBox">
+            <summary>Usar outro serviço de IA nas respostas (Gemini, Groq, DeepSeek e outros)</summary>
+            <p class="hint">
+              Serve qualquer serviço compatível com a API da OpenAI, e vários têm faixa gratuita. A transcrição continua
+              pelo OpenRouter ou pelo Whisper deste computador.
+            </p>
+            <label class="field">
+              <span>Serviço</span>
+              <select id="customPreset">
+                <option value="">Escolha para preencher o endereço</option>
+                <option value="https://generativelanguage.googleapis.com/v1beta/openai">Google Gemini (AI Studio)</option>
+                <option value="https://api.groq.com/openai/v1">Groq</option>
+                <option value="https://api.cerebras.ai/v1">Cerebras</option>
+                <option value="https://api.mistral.ai/v1">Mistral</option>
+                <option value="https://api.deepseek.com/v1">DeepSeek</option>
+                <option value="http://localhost:11434/v1">Ollama neste computador</option>
+              </select>
+            </label>
+            <label class="field"><span>Endereço da API</span><input id="customBase" spellcheck="false" /></label>
+            <label class="field">
+              <span>Chave do serviço <em id="customKeyState"></em></span>
+              <div class="row">
+                <input id="customKey" type="password" placeholder="Cole a chave do serviço" autocomplete="off" />
+                <button id="saveCustomKey" class="pill">Salvar</button>
+              </div>
+            </label>
+            <label class="field">
+              <span>Modelo</span>
+              <div class="row">
+                <input id="customModel" list="customModels" spellcheck="false" />
+                <button id="listCustomModels" class="ghost">Ver modelos</button>
+              </div>
+              <datalist id="customModels"></datalist>
+            </label>
+            <label class="check">
+              <input id="useCustom" type="checkbox" />
+              <span><b>Usar este serviço para responder</b><small>Desligado, as respostas voltam para o OpenRouter.</small></span>
+            </label>
+          </details>
+
           <div class="group">
             <h2>Idioma</h2>
             <label class="field"><span>Idioma falado na conversa</span><input id="language" /></label>
@@ -231,6 +271,7 @@
               <select id="chatProvider">
                 <option value="openrouter">A nuvem (OpenRouter)</option>
                 <option value="local">Este computador (llama.cpp)</option>
+                <option value="custom">Outro serviço (configurado em Ajustes)</option>
               </select>
               <small>O modelo local não enxerga imagens: a análise de tela usa só a transcrição.</small>
             </label>
@@ -327,6 +368,32 @@
         </div>
         <div class="detail-col">
           <label class="field"><span>Nome do modo</span><input id="aName" /></label>
+
+          <div id="jobBox" class="group" hidden>
+            <h2>Vaga desta entrevista</h2>
+            <p class="hint">Cadastre cada vaga com o currículo que você enviou para ela. O Aside usa a vaga selecionada.</p>
+            <div class="row">
+              <select id="jobSelect"></select>
+              <button id="jobNew" class="ghost add">+ Nova vaga</button>
+              <button id="jobDelete" class="ghost danger">Excluir</button>
+            </div>
+            <div id="jobFields" hidden>
+              <label class="field"><span>Vaga e empresa</span><input id="jobTitle" placeholder="Ex.: Desenvolvedor pleno na Empresa X" /></label>
+              <label class="field"><span>Tipo de entrevista</span><select id="jobType"></select></label>
+              <div class="field">
+                <span>Currículo enviado para esta vaga</span>
+                <div id="jobResume" class="rows"></div>
+              </div>
+              <label class="field">
+                <span>Descrição da vaga</span>
+                <textarea id="jobDescription" rows="5" placeholder="Cole aqui o texto do anúncio da vaga."></textarea>
+              </label>
+              <label class="field">
+                <span>Anotações sobre esta vaga (opcional)</span>
+                <textarea id="jobNotes" rows="3" placeholder="Quem vai entrevistar, pontos que quero destacar, dúvidas para perguntar."></textarea>
+              </label>
+            </div>
+          </div>
           <label class="field">
             <span>O que ele precisa saber</span>
             <textarea

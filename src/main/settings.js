@@ -29,6 +29,8 @@ const DEFAULTS = {
   llamaVariant: 'vulkan',
   llamaModel: '',
   llamaContext: 8192,
+  customBase: '',
+  customModel: '',
   shortcuts: {
     toggle: 'Control+Shift+Space',
     ask: 'Control+Shift+Enter',
@@ -67,6 +69,10 @@ function load() {
     }
     cache.seed = 2;
   }
+  if (cache.seed < 3) {
+    cache.assistants = cache.assistants.map((a) => (a.id === 'entrevista' ? { ...a, interview: true } : a));
+    cache.seed = 3;
+  }
   return cache;
 }
 
@@ -76,13 +82,13 @@ function save() {
 }
 
 function publicView() {
-  const { apiKeyEnc, mcpEnc, ...rest } = load();
-  return { ...rest, hasKey: Boolean(apiKeyEnc) };
+  const { apiKeyEnc, mcpEnc, customKeyEnc, ...rest } = load();
+  return { ...rest, hasKey: Boolean(apiKeyEnc), hasCustomKey: Boolean(customKeyEnc) };
 }
 
 function update(patch) {
   load();
-  const { apiKeyEnc, mcpEnc, hasKey, ...safe } = patch || {};
+  const { apiKeyEnc, mcpEnc, customKeyEnc, hasKey, hasCustomKey, ready, ...safe } = patch || {};
   Object.assign(cache, safe);
   save();
   return publicView();
@@ -113,6 +119,28 @@ function getApiKey() {
   }
 }
 
+// Chave de outro servico de IA compativel com a API da OpenAI.
+function setCustomKey(key) {
+  load();
+  const value = String(key || '').trim();
+  if (!value) delete cache.customKeyEnc;
+  else {
+    if (!safeStorage.isEncryptionAvailable()) throw new Error('O cofre de credenciais do sistema não está disponível.');
+    cache.customKeyEnc = safeStorage.encryptString(value).toString('base64');
+  }
+  save();
+}
+
+function getCustomKey() {
+  load();
+  if (!cache.customKeyEnc) return '';
+  try {
+    return safeStorage.decryptString(Buffer.from(cache.customKeyEnc, 'base64'));
+  } catch {
+    return '';
+  }
+}
+
 // Servidores MCP: a configuracao pode conter tokens, entao fica toda cifrada.
 function getMcpServers() {
   load();
@@ -134,4 +162,15 @@ function setMcpServers(list) {
   save();
 }
 
-module.exports = { DEFAULTS, load, publicView, update, setApiKey, getApiKey, getMcpServers, setMcpServers };
+module.exports = {
+  DEFAULTS,
+  load,
+  publicView,
+  update,
+  setApiKey,
+  getApiKey,
+  setCustomKey,
+  getCustomKey,
+  getMcpServers,
+  setMcpServers,
+};

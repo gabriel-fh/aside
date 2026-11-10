@@ -63,14 +63,17 @@
 
   /* ---------- arrastar a janela ---------- */
 
+  // A barra inteira arrasta a janela, menos os controles dela.
+  const bar = document.getElementById('bar');
   let last = null;
-  el.drag.addEventListener('pointerdown', (event) => {
+  bar.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || event.target.closest('button, select, input')) return;
     dragging = true;
     last = { x: event.screenX, y: event.screenY };
-    el.drag.setPointerCapture(event.pointerId);
-    el.drag.classList.add('dragging');
+    bar.setPointerCapture(event.pointerId);
+    bar.classList.add('dragging');
   });
-  el.drag.addEventListener('pointermove', (event) => {
+  bar.addEventListener('pointermove', (event) => {
     if (!dragging) return;
     const dx = event.screenX - last.x;
     const dy = event.screenY - last.y;
@@ -80,10 +83,10 @@
   });
   const endDrag = () => {
     dragging = false;
-    el.drag.classList.remove('dragging');
+    bar.classList.remove('dragging');
   };
-  el.drag.addEventListener('pointerup', endDrag);
-  el.drag.addEventListener('pointercancel', endDrag);
+  bar.addEventListener('pointerup', endDrag);
+  bar.addEventListener('pointercancel', endDrag);
 
   /* ---------- estado e configuracoes ---------- */
 
@@ -119,6 +122,11 @@
     if (files) parts.push(files === 1 ? '1 arquivo' : `${files} arquivos`);
     el.ctxBadge.hidden = !parts.length;
     el.ctxBadge.textContent = `Contexto: ${parts.join(' e ')}`;
+    const job = mode && mode.interview && Array.isArray(mode.jobs) ? mode.jobs.find((j) => j.id === mode.activeJobId) : null;
+    if (job) {
+      el.ctxBadge.hidden = false;
+      el.ctxBadge.textContent = `Vaga: ${job.title}`;
+    }
   }
 
   function tick() {

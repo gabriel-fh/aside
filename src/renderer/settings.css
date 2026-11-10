@@ -248,6 +248,26 @@ textarea {
   border: 1px dashed var(--line-strong);
 }
 
+#jobBox .row {
+  margin-bottom: 12px;
+}
+
+#jobBox .row select {
+  flex: 1;
+  min-width: 0;
+}
+
+#jobBox > .hint {
+  margin: -6px 0 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+details.group.adv > .hint {
+  margin: 10px 0 14px;
+  line-height: 1.5;
+}
+
 .danger:hover {
   color: var(--danger);
 }

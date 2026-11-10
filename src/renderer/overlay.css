@@ -44,17 +44,25 @@ body {
   background: var(--line-strong);
 }
 
+#bar {
+  cursor: grab;
+}
+
+#bar.dragging {
+  cursor: grabbing;
+}
+
+#bar button,
+#bar select {
+  cursor: pointer;
+}
+
 #drag {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 2px 8px 2px 4px;
   font-weight: 600;
-  cursor: grab;
-}
-
-#drag.dragging {
-  cursor: grabbing;
 }
 
 #drag img {

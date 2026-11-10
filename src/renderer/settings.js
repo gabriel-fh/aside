@@ -90,7 +90,10 @@
     const ready = Boolean(settings.ready);
     const mode = settings.assistants.find((a) => a.id === settings.activeAssistantId) || settings.assistants[0];
     const files = Array.isArray(mode.files) ? mode.files.length : 0;
-    const hasContext = Boolean((mode.context && mode.context.trim()) || files);
+    const job = mode.interview && Array.isArray(mode.jobs) ? mode.jobs.find((j) => j.id === mode.activeJobId) : null;
+    const hasContext = mode.interview
+      ? Boolean(job && (job.resume || job.description))
+      : Boolean((mode.context && mode.context.trim()) || files);
 
     $('homeTitle').textContent = sessionActive
       ? 'Sessão em andamento'
@@ -105,7 +108,8 @@
     $('homeStart').classList.toggle('live', sessionActive);
     $('homeStartLabel').textContent = sessionActive ? 'Encerrar sessão' : 'Iniciar sessão';
 
-    const local = settings.transcribeProvider === 'local' || settings.chatProvider === 'local';
+    const local = settings.transcribeProvider === 'local' && settings.chatProvider === 'local';
+    const other = settings.chatProvider === 'custom';
     $('homeChecklist').replaceChildren(
       stepRow(
         ready,
@@ -114,7 +118,9 @@
         ready
           ? local
             ? 'Usando modelos deste computador.'
-            : 'Chave do OpenRouter salva.'
+            : other
+              ? 'Respostas por outro serviço de IA.'
+              : 'Tudo configurado.'
           : 'Cole uma chave do OpenRouter (leva 2 minutos) ou configure o uso offline.',
         ready ? 'Alterar' : 'Conectar',
         () => showTab('geral')
@@ -122,10 +128,14 @@
       stepRow(
         hasContext,
         2,
-        `Dar material ao modo ${mode.name} (opcional)`,
+        mode.interview ? 'Cadastrar a vaga e o currículo da entrevista' : `Dar material ao modo ${mode.name} (opcional)`,
         hasContext
-          ? 'Este modo já tem material de apoio.'
-          : 'Currículo, descrição da vaga, pauta ou anotações deixam as respostas muito mais certeiras.',
+          ? mode.interview
+            ? `Vaga selecionada: ${job.title}.`
+            : 'Este modo já tem material de apoio.'
+          : mode.interview
+            ? 'Informe a vaga, o tipo de entrevista e o currículo que você enviou para ela.'
+            : 'Pauta, documentos ou anotações deixam as respostas muito mais certeiras.',
         hasContext ? 'Editar' : 'Adicionar',
         () => {
           selectedAssistant = mode.id;
@@ -240,6 +250,8 @@
     'whisperLang',
     'transcribeProvider',
     'chatProvider',
+    'customBase',
+    'customModel',
   ];
   const CHECK_FIELDS = ['captureMic', 'captureSystem', 'speakerMode', 'autoInsights', 'autoSummary', 'stealth'];
 
@@ -262,6 +274,8 @@
     for (const id of CHECK_FIELDS) $(id).checked = Boolean(settings[id]);
     $('opacity').value = settings.opacity;
     $('keyState').textContent = settings.hasKey ? '(salva)' : '';
+    $('customKeyState').textContent = settings.hasCustomKey ? '(salva)' : '';
+    $('useCustom').checked = settings.chatProvider === 'custom';
     refreshModelInfo();
   }
 
@@ -287,6 +301,39 @@
       await api.setApiKey('');
       toast('Chave removida.');
     })
+  );
+  $('customPreset').addEventListener('change', () =>
+    guard(async () => {
+      const base = $('customPreset').value;
+      if (!base) return;
+      $('customBase').value = base;
+      await api.setSettings({ customBase: base });
+    })
+  );
+  $('saveCustomKey').addEventListener('click', () =>
+    guard(async () => {
+      await api.setCustomKey($('customKey').value.trim());
+      $('customKey').value = '';
+      toast('Chave do serviço salva.');
+    })
+  );
+  $('listCustomModels').addEventListener('click', () =>
+    guard(async () => {
+      await api.setSettings({ customBase: $('customBase').value.trim() });
+      const list = await api.listCustomModels();
+      $('customModels').replaceChildren(
+        ...list.map((id) => {
+          const option = document.createElement('option');
+          option.value = id;
+          return option;
+        })
+      );
+      toast(`${list.length} modelos encontrados. Clique no campo Modelo para escolher.`);
+      $('customModel').focus();
+    })
+  );
+  $('useCustom').addEventListener('change', () =>
+    guard(() => api.setSettings({ chatProvider: $('useCustom').checked ? 'custom' : 'openrouter' }))
   );
   $('pickVault').addEventListener('click', () =>
     guard(async () => {
@@ -581,10 +628,33 @@
   let selectedAssistant = null;
   let formAssistant = null;
   let draftFiles = [];
+  let draftJobs = [];
+  let draftJobId = null;
+
+  const INTERVIEW_TYPES = [
+    ['rh', 'Conversa com RH'],
+    ['tecnica_conversa', 'Técnica: bate-papo'],
+    ['tecnica_codigo', 'Técnica: código ao vivo'],
+    ['desafio', 'Desafio técnico'],
+    ['misto', 'Mista: bate-papo técnico e código'],
+    ['gestor', 'Com gestor ou time'],
+  ];
+  $('jobType').replaceChildren(
+    ...INTERVIEW_TYPES.map(([value, label]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      return option;
+    })
+  );
+
+  const sizeNote = (file) =>
+    `${Math.max(1, Math.round(file.text.length / 1000))} mil caracteres${file.truncated ? ', cortado' : ''}`;
+  const cleanFile = (f) => ({ name: f.name, text: f.text, truncated: Boolean(f.truncated) });
 
   function renderFiles() {
     const rows = draftFiles.map((file, index) =>
-      lrow(file.name, `${Math.max(1, Math.round(file.text.length / 1000))} mil caracteres${file.truncated ? ', cortado' : ''}`, [
+      lrow(file.name, sizeNote(file), [
         button('Remover', () => {
           draftFiles = draftFiles.filter((_f, i) => i !== index);
           renderFiles();
@@ -593,6 +663,100 @@
     );
     $('aFiles').replaceChildren(...rows);
   }
+
+  /* vagas do modo de entrevista */
+
+  const currentJob = () => draftJobs.find((j) => j.id === draftJobId) || null;
+
+  // Guarda no rascunho o que esta digitado nos campos da vaga.
+  function readJobForm() {
+    const job = currentJob();
+    if (!job) return;
+    job.title = $('jobTitle').value.trim() || 'Vaga sem nome';
+    job.type = $('jobType').value;
+    job.description = $('jobDescription').value.trim();
+    job.notes = $('jobNotes').value.trim();
+  }
+
+  async function pickResume() {
+    const picked = await api.pickContextFiles();
+    if (!picked.length) return;
+    const file = picked[0];
+    if (file.error) return toast(`${file.name}: ${file.error}`, true);
+    readJobForm();
+    currentJob().resume = cleanFile(file);
+    renderJobs();
+    toast('Currículo adicionado. Clique em Salvar para gravar.');
+  }
+
+  function renderJobs() {
+    const mode = settings.assistants.find((a) => a.id === selectedAssistant);
+    const interview = Boolean(mode && mode.interview);
+    $('jobBox').hidden = !interview;
+    if (!interview) return;
+
+    $('jobSelect').replaceChildren(
+      ...draftJobs.map((j) => {
+        const option = document.createElement('option');
+        option.value = j.id;
+        option.textContent = j.title;
+        return option;
+      })
+    );
+    const job = currentJob();
+    $('jobSelect').hidden = !draftJobs.length;
+    $('jobDelete').hidden = !job;
+    $('jobFields').hidden = !job;
+    if (!job) return;
+    $('jobSelect').value = job.id;
+    $('jobTitle').value = job.title;
+    $('jobType').value = job.type;
+    $('jobDescription').value = job.description || '';
+    $('jobNotes').value = job.notes || '';
+    $('jobResume').replaceChildren(
+      job.resume
+        ? lrow(job.resume.name, sizeNote(job.resume), [
+            button('Trocar', pickResume),
+            button('Remover', () => {
+              readJobForm();
+              currentJob().resume = null;
+              renderJobs();
+            }, true),
+          ])
+        : (() => {
+            const add = button('+ Adicionar o currículo (PDF, Word ou texto)', pickResume);
+            add.className = 'ghost add';
+            return add;
+          })()
+    );
+  }
+
+  $('jobSelect').addEventListener('change', () => {
+    readJobForm();
+    draftJobId = $('jobSelect').value;
+    renderJobs();
+  });
+  $('jobTitle').addEventListener('input', () => {
+    const option = $('jobSelect').selectedOptions[0];
+    if (option) option.textContent = $('jobTitle').value || 'Vaga sem nome';
+  });
+  $('jobNew').addEventListener('click', () => {
+    readJobForm();
+    const id = `v${Date.now().toString(36)}`;
+    draftJobs = [...draftJobs, { id, title: 'Nova vaga', type: 'tecnica_conversa', description: '', notes: '', resume: null }];
+    draftJobId = id;
+    renderJobs();
+    $('jobTitle').focus();
+    $('jobTitle').select();
+  });
+  $('jobDelete').addEventListener('click', () => {
+    if (!confirm('Excluir esta vaga e o currículo dela?')) return;
+    draftJobs = draftJobs.filter((j) => j.id !== draftJobId);
+    draftJobId = draftJobs.length ? draftJobs[0].id : null;
+    renderJobs();
+  });
+
+  /* lista e formulario do modo */
 
   function renderAssistants(forceFill) {
     if (!settings.assistants.some((a) => a.id === selectedAssistant)) {
@@ -606,8 +770,10 @@
         name.textContent = a.name;
         const note = document.createElement('span');
         const files = Array.isArray(a.files) ? a.files.length : 0;
+        const jobs = a.interview && Array.isArray(a.jobs) ? a.jobs.length : 0;
         const bits = [];
         if (a.id === settings.activeAssistantId) bits.push('Em uso');
+        if (jobs) bits.push(jobs === 1 ? '1 vaga' : `${jobs} vagas`);
         if (a.context && a.context.trim()) bits.push('anotações');
         if (files) bits.push(files === 1 ? '1 arquivo' : `${files} arquivos`);
         note.textContent = bits.join(', ') || ' ';
@@ -628,7 +794,14 @@
     $('aPrompt').value = current.prompt || '';
     $('aContext').value = current.context || '';
     draftFiles = Array.isArray(current.files) ? current.files.slice() : [];
+    draftJobs = Array.isArray(current.jobs) ? current.jobs.map((j) => ({ ...j })) : [];
+    draftJobId = draftJobs.some((j) => j.id === current.activeJobId)
+      ? current.activeJobId
+      : draftJobs.length
+        ? draftJobs[0].id
+        : null;
     renderFiles();
+    renderJobs();
   }
 
   $('newAssistant').addEventListener('click', () =>
@@ -657,12 +830,18 @@
   );
   $('aSave').addEventListener('click', () =>
     guard(async () => {
+      const current = settings.assistants.find((a) => a.id === selectedAssistant);
       const patch = {
         name: $('aName').value.trim() || 'Sem nome',
         prompt: $('aPrompt').value.trim(),
         context: $('aContext').value.trim(),
-        files: draftFiles.map((f) => ({ name: f.name, text: f.text, truncated: Boolean(f.truncated) })),
+        files: draftFiles.map(cleanFile),
       };
+      if (current && current.interview) {
+        readJobForm();
+        patch.jobs = draftJobs;
+        patch.activeJobId = draftJobId;
+      }
       formAssistant = null;
       await api.setSettings({
         assistants: settings.assistants.map((a) => (a.id === selectedAssistant ? { ...a, ...patch } : a)),

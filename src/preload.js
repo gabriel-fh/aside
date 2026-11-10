@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('aside', {
   setSettings: invoke('settings:set'),
   setApiKey: invoke('key:set'),
   listModels: invoke('models:list'),
+  setCustomKey: invoke('custom-key:set'),
+  listCustomModels: invoke('custom:models'),
 
   startSession: invoke('session:start'),
   stopSession: invoke('session:stop'),

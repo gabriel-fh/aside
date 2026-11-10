@@ -53,11 +53,18 @@ function status(kind, message) {
 
 const NO_KEY = 'Informe a chave do OpenRouter em Ajustes.';
 
-// Para onde vai o chat: OpenRouter ou o llama.cpp local.
+const customBase = () => String(settings.load().customBase || '').trim().replace(/\/+$/, '');
+
+// Para onde vai o chat: OpenRouter, outro servico compativel ou o llama.cpp local.
 async function chatTarget() {
   const s = settings.load();
   if (s.chatProvider === 'local') {
     return { base: await local.llamaBase(), key: '', model: 'local', local: true };
+  }
+  if (s.chatProvider === 'custom') {
+    const base = customBase();
+    if (!base || !s.customModel) throw new Error('Preencha o endereço e o modelo do outro serviço em Ajustes.');
+    return { base, key: settings.getCustomKey(), model: s.customModel, local: false };
   }
   const key = settings.getApiKey();
   if (!key) throw new Error(NO_KEY);
@@ -93,7 +100,9 @@ function aiReady() {
   const engine = (kind) => state[kind].variants.some((v) => v.selected && v.installed);
   const whisperOk = engine('whisper') && state.whisper.models.some((m) => m.id === s.whisperModel && m.installed);
   const llamaOk = engine('llama') && Boolean(s.llamaModel) && fs.existsSync(s.llamaModel);
-  return (s.transcribeProvider === 'local' ? whisperOk : hasKey) && (s.chatProvider === 'local' ? llamaOk : hasKey);
+  const chatOk =
+    s.chatProvider === 'local' ? llamaOk : s.chatProvider === 'custom' ? Boolean(customBase() && s.customModel) : hasKey;
+  return (s.transcribeProvider === 'local' ? whisperOk : hasKey) && chatOk;
 }
 
 function viewSettings() {
@@ -286,7 +295,7 @@ async function captureScreen() {
 async function ask({ text = '', withScreen = false, auto = false } = {}) {
   const s = settings.publicView();
   const useLocal = s.chatProvider === 'local';
-  if (!useLocal && !s.hasKey) {
+  if (s.chatProvider === 'openrouter' && !s.hasKey) {
     status('error', NO_KEY);
     if (!auto) openSettings('geral');
     return;
@@ -534,6 +543,23 @@ function registerIpc() {
     broadcast('settings', next);
     return next;
   });
+  ipcMain.handle('custom-key:set', (_e, key) => {
+    settings.setCustomKey(key);
+    const next = viewSettings();
+    lastReady = next.ready;
+    broadcast('settings', next);
+    return next;
+  });
+  ipcMain.handle('custom:models', async () => {
+    const base = customBase();
+    if (!base) throw new Error('Informe o endereço da API primeiro.');
+    const key = settings.getCustomKey();
+    const res = await fetch(`${base}/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {} });
+    if (!res.ok) throw new Error(`O serviço respondeu ${res.status} ao listar os modelos.`);
+    const json = await res.json();
+    const list = Array.isArray(json) ? json : json.data || json.models || [];
+    return list.map((m) => String(m.id || m.name || '').replace(/^models\//, '')).filter(Boolean);
+  });
   ipcMain.handle('models:list', (_e, force) => openrouter.listModels(Boolean(force)));
 
   ipcMain.handle('session:start', () => startSession());
@@ -639,6 +665,10 @@ async function devShots() {
   openSettings(process.env.ASIDE_SHOT_TAB || undefined);
   const [shotWidth, shotHeight] = String(process.env.ASIDE_SHOT_SIZE || '').split('x').map(Number);
   if (shotWidth && shotHeight) settingsWin.setContentSize(shotWidth, shotHeight);
+  if (process.env.ASIDE_SHOT_EVAL) {
+    await new Promise((r) => setTimeout(r, 1200));
+    await settingsWin.webContents.executeJavaScript(process.env.ASIDE_SHOT_EVAL, true);
+  }
   await new Promise((r) => setTimeout(r, 1800));
   broadcast('session', { active: true, id: 0, startedAt: Date.now() });
   broadcast('transcript', { speaker: 'them', text: 'Qual prazo a gente consegue para a entrega da API?', ts: Date.now() });

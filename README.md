@@ -45,6 +45,14 @@ Tudo passa pelo OpenRouter, então qualquer modelo da lista serve para as respos
 
 Os dados ficam em `%APPDATA%\aside` (`settings.json` e `aside.db`).
 
+## Outros serviços de IA
+
+Em Ajustes, "Usar outro serviço de IA nas respostas" aceita qualquer serviço compatível com a API da OpenAI: Google Gemini (AI Studio), Groq, Cerebras, Mistral, DeepSeek ou um Ollama local. Informe o endereço, a chave e o modelo. A transcrição continua pelo OpenRouter ou pelo Whisper local.
+
+## Entrevistas
+
+O modo Entrevista guarda uma ficha por vaga: nome da vaga, tipo de entrevista (RH, técnica em bate-papo, código ao vivo, desafio técnico, mista ou com gestor), o currículo enviado para aquela vaga, a descrição e anotações. O Aside usa a vaga selecionada.
+
 ## Modo local
 
 Na aba Local dos Ajustes dá para rodar tudo neste computador, sem chave:
