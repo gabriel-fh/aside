@@ -177,7 +177,7 @@
     const keys = [
       ['toggle', 'Mostrar ou esconder a barra'],
       ['session', 'Iniciar ou encerrar a sessão'],
-      ['ask', 'Pedir ajuda agora'],
+      ['ask', 'Responder à última pergunta'],
       ['screen', 'Analisar a tela'],
     ];
     $('homeShortcuts').replaceChildren(
@@ -967,7 +967,7 @@
   const SHORTCUTS = [
     ['toggle', 'Mostrar ou ocultar o overlay'],
     ['session', 'Iniciar ou parar a sessão'],
-    ['ask', 'Perguntar com base na conversa'],
+    ['ask', 'Responder à última pergunta'],
     ['screen', 'Analisar a tela'],
     ['up', 'Mover para cima'],
     ['down', 'Mover para baixo'],

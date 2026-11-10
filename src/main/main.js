@@ -37,6 +37,8 @@ let tray = null;
 // Estado da sessao ao vivo. `lines` e `turns` alimentam o contexto do modelo.
 const live = { id: null, startedAt: null, lines: [], turns: [] };
 let lastReady = null;
+// Transcricoes em andamento: "Responder" espera por elas para nao perder o fim da pergunta.
+const pendingSegments = new Set();
 let currentAsk = null;
 let askSeq = 0;
 let autoTimer = null;
@@ -233,7 +235,8 @@ function registerShortcuts() {
   const sc = settings.load().shortcuts;
   const actions = {
     toggle: toggleOverlay,
-    ask: () => ask({}),
+    // Passa pela barra flutuante: ela corta a fala em andamento antes de perguntar.
+    ask: () => (overlay ? overlay.webContents.send('cmd', { type: 'answer-now' }) : ask({ answerNow: true })),
     screen: () => ask({ withScreen: true }),
     session: () => overlay && overlay.webContents.send('cmd', { type: 'toggle-session' }),
     up: () => moveOverlay(0, -40),
@@ -292,7 +295,7 @@ async function captureScreen() {
 
 /* ---------- perguntas ao modelo ---------- */
 
-async function ask({ text = '', withScreen = false, auto = false } = {}) {
+async function ask({ text = '', withScreen = false, auto = false, answerNow = false } = {}) {
   const s = settings.publicView();
   const useLocal = s.chatProvider === 'local';
   if (s.chatProvider === 'openrouter' && !s.hasKey) {
@@ -310,8 +313,10 @@ async function ask({ text = '', withScreen = false, auto = false } = {}) {
     typed ||
     (withScreen
       ? 'Analise o que está na tela e me ajude com isso.'
-      : 'Com base na conversa até aqui, o que é mais útil eu saber ou dizer agora?');
-  const label = typed || (withScreen ? 'Análise da tela' : 'O que vem agora?');
+      : answerNow
+        ? 'Responda agora à última pergunta ou fala de Eles. Comece pela resposta que eu posso dizer em voz alta, em 1 a 3 frases, na primeira pessoa. Só depois, se ajudar, acrescente detalhes curtos.'
+        : 'Com base na conversa até aqui, o que é mais útil eu saber ou dizer agora?');
+  const label = typed || (withScreen ? 'Análise da tela' : answerNow ? 'Responder agora' : 'O que vem agora?');
   const assistant = s.assistants.find((a) => a.id === s.activeAssistantId) || s.assistants[0];
 
   if (overlay && !overlay.isVisible() && !auto) overlay.showInactive();
@@ -319,6 +324,11 @@ async function ask({ text = '', withScreen = false, auto = false } = {}) {
 
   let full = '';
   try {
+    // Espera o fim da pergunta terminar de ser transcrito, com teto para nao travar.
+    if (pendingSegments.size) {
+      await Promise.race([Promise.allSettled([...pendingSegments]), new Promise((r) => setTimeout(r, 8000))]);
+      if (controller.signal.aborted) throw new Error('Cancelado.');
+    }
     if (withScreen && useLocal) status('info', 'O modelo local não lê imagens: a tela foi ignorada.');
     const target = await chatTarget();
     const imageDataUrl = withScreen && !useLocal ? await captureScreen() : null;
@@ -366,7 +376,7 @@ function maybeAutoInsight(line) {
       auto: true,
       text: `Eles acabaram de dizer: "${line.text}". Se for uma pergunta para mim, dê a resposta de forma breve. Se não for, aponte o ponto principal em uma frase.`,
     });
-  }, 1200);
+  }, 500);
 }
 
 // Ferramenta que altera algo fora do app so roda com o seu aval, a menos que o servidor seja de confianca.
@@ -566,7 +576,9 @@ function registerIpc() {
   ipcMain.handle('session:stop', () => stopSession());
   ipcMain.handle('session:state', () => sessionState());
   ipcMain.handle('audio:segment', (_e, segment) => {
-    handleSegment(segment || {});
+    const job = handleSegment(segment || {});
+    pendingSegments.add(job);
+    job.finally(() => pendingSegments.delete(job));
   });
   ipcMain.handle('audio:desktop-source', async () => {
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });

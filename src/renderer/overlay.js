@@ -29,7 +29,7 @@
   const EMPTY_ANSWER = [
     '<div class="empty"><b>Como usar</b><ol>',
     '<li>Clique em <kbd>Iniciar</kbd> e converse normalmente.</li>',
-    '<li>Quando alguém fizer uma pergunta, uma sugestão de resposta aparece aqui.</li>',
+    '<li>Quando te perguntarem algo, clique em <kbd>Responder</kbd> ou aperte <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Enter</kbd>.</li>',
     '<li>Precisa de algo? Use os botões abaixo ou escreva sua pergunta.</li>',
     '</ol></div>',
   ].join('');
@@ -275,6 +275,13 @@
     }
   });
 
+  // Corta a fala em andamento, manda transcrever e ja pede a resposta.
+  function answerNow() {
+    if (active) window.asideAudio.flush();
+    api.ask({ answerNow: true });
+  }
+  document.getElementById('answerBtn').addEventListener('click', answerNow);
+
   function takeQuestion() {
     const text = el.q.value.trim();
     el.q.value = '';
@@ -307,6 +314,7 @@
   api.on('status', ({ kind, message }) => showStatus(message, kind));
   api.on('cmd', (cmd) => {
     if (cmd.type === 'toggle-session') (active ? stopSession : startSession)();
+    if (cmd.type === 'answer-now') answerNow();
   });
 
   el.answer.innerHTML = EMPTY_ANSWER;

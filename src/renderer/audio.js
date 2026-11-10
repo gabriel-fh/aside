@@ -2,8 +2,10 @@
 // Cada trecho de fala vira um WAV mono de 16 kHz em base64.
 (function () {
   const RATE = 16000;
-  const SILENCE_MS = 700;
-  const MAX_MS = 14000;
+  // Trechos curtos: a transcricao acontece enquanto a pessoa ainda fala,
+  // e ao fim da fala sobra pouco audio para processar.
+  const SILENCE_MS = 550;
+  const MAX_MS = 7000;
   const MIN_VOICED_MS = 300;
   const PREROLL_MS = 300;
 
@@ -220,5 +222,11 @@
     }
   }
 
-  window.asideAudio = { start, stop };
+  // Fecha na hora o que estiver sendo falado, sem esperar o silencio.
+  function flush() {
+    if (!state) return;
+    for (const segmenter of Object.values(state.segmenters)) segmenter.flush();
+  }
+
+  window.asideAudio = { start, stop, flush };
 })();
