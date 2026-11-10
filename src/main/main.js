@@ -18,6 +18,7 @@ const settings = require('./settings');
 const db = require('./db');
 const openrouter = require('./openrouter');
 const local = require('./local');
+const mcp = require('./mcp');
 const { SPEAKER_LABEL, buildChatMessages, buildSummaryMessages } = require('./prompts');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -297,11 +298,16 @@ async function ask({ text = '', withScreen = false, auto = false } = {}) {
       request,
       imageDataUrl,
     });
-    full = await openrouter.streamChat({
+    // Ferramentas so em perguntas feitas pelo usuario e com modelo na nuvem.
+    const tools = auto || target.local ? [] : mcp.toolsForModel();
+    full = await openrouter.runChat({
       ...target,
       messages: target.local ? textOnly(messages) : messages,
+      tools,
       signal: controller.signal,
       onDelta: (delta) => broadcast('answer:delta', { id, text: delta }),
+      callTool: (name, args) => mcp.call(name, args),
+      onTool: (name) => status('info', `Usando ferramenta: ${mcp.label(name)}`),
     });
     live.turns.push({ q: request, a: full });
     if (live.turns.length > 20) live.turns.shift();
@@ -328,6 +334,26 @@ function maybeAutoInsight(line) {
       text: `Eles acabaram de dizer: "${line.text}". Se for uma pergunta para mim, dê a resposta de forma breve. Se não for, aponte o ponto principal em uma frase.`,
     });
   }, 1200);
+}
+
+// Ferramenta que altera algo fora do app so roda com o seu aval, a menos que o servidor seja de confianca.
+async function confirmTool({ server, tool, args }) {
+  const parent = overlay && overlay.isVisible() ? overlay : settingsWin || undefined;
+  const options = {
+    type: 'question',
+    buttons: ['Executar', 'Negar'],
+    defaultId: 1,
+    cancelId: 1,
+    title: 'Aside',
+    message: `Executar a ferramenta "${tool}" de ${server}?`,
+    detail: JSON.stringify(args, null, 2).slice(0, 1500),
+  };
+  const result = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+  return result.response === 0;
+}
+
+function mcpState() {
+  return { servers: settings.getMcpServers(), status: mcp.status() };
 }
 
 /* ---------- sessao e transcricao ---------- */
@@ -516,6 +542,17 @@ function registerIpc() {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  ipcMain.handle('mcp:get', () => mcpState());
+  ipcMain.handle('mcp:save', (_e, servers) => {
+    settings.setMcpServers(servers);
+    mcp.sync(settings.getMcpServers());
+    return mcpState();
+  });
+  ipcMain.handle('mcp:reconnect', async (_e, id) => {
+    await mcp.reconnect(id);
+    return mcpState();
+  });
+
   ipcMain.handle('local:status', () => local.status());
   ipcMain.handle('local:install', (_e, kind, variant) => local.installBinary(kind, variant));
   ipcMain.handle('local:whisper-model', (_e, id) => local.downloadWhisperModel(id));
@@ -588,6 +625,11 @@ if (!app.requestSingleInstanceLock()) {
     db.open();
     db.closeDangling();
     local.init({ getSettings: () => settings.load(), onChange: (state) => broadcast('local', state) });
+    mcp.init({
+      confirm: confirmTool,
+      onChange: (state) => settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.send('mcp', state),
+    });
+    mcp.sync(settings.getMcpServers());
 
     // Audio do sistema: getDisplayMedia entrega o loopback sem abrir seletor.
     electronSession.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
@@ -603,7 +645,11 @@ if (!app.requestSingleInstanceLock()) {
     registerShortcuts();
     applyStealth();
 
-    if (process.env.ASIDE_LOCAL_TEST) {
+    if (process.env.ASIDE_MCP_TEST) {
+      require('./dev')
+        .mcpTest({ mcp, openrouter })
+        .finally(() => app.quit());
+    } else if (process.env.ASIDE_LOCAL_TEST) {
       require('./dev')
         .localTest({ local, settings, openrouter, wavPath: process.env.ASIDE_LOCAL_TEST })
         .finally(() => app.quit());
@@ -619,6 +665,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     local.stopAll();
+    mcp.closeAll();
     if (live.id) db.endSession(live.id);
   });
 }

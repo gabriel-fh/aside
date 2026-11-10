@@ -15,6 +15,7 @@
       <div class="brand"><img src="../../assets/logo.png" alt="" /><span>Aside</span></div>
       <button data-tab="geral" class="tab on">Geral</button>
       <button data-tab="local" class="tab">Local</button>
+      <button data-tab="ferramentas" class="tab">Ferramentas</button>
       <button data-tab="assistentes" class="tab">Assistentes</button>
       <button data-tab="historico" class="tab">Histórico</button>
       <button data-tab="atalhos" class="tab">Atalhos</button>
@@ -142,6 +143,61 @@
               <button id="ggufPick" class="ghost">Escolher arquivo</button>
             </div>
           </label>
+        </div>
+      </section>
+
+      <section id="tab-ferramentas" class="page split" hidden>
+        <div class="list-col">
+          <div class="list-head"><h1>Ferramentas</h1><button id="newServer" class="pill">Novo</button></div>
+          <p class="hint">Servidores MCP que o modelo pode usar quando você faz uma pergunta.</p>
+          <div id="serverList" class="list"></div>
+        </div>
+        <div class="detail-col">
+          <div id="mEmpty" class="hint">Adicione um servidor MCP para dar ferramentas ao assistente.</div>
+          <div id="mDetail" hidden>
+            <label class="field"><span>Nome</span><input id="mName" /></label>
+            <label class="field">
+              <span>Tipo</span>
+              <select id="mType">
+                <option value="stdio">Comando local (stdio)</option>
+                <option value="http">Servidor remoto (HTTP)</option>
+              </select>
+            </label>
+            <div id="mStdio">
+              <label class="field"><span>Comando</span><input id="mCommand" placeholder="npx" spellcheck="false" /></label>
+              <label class="field">
+                <span>Argumentos</span>
+                <input id="mArgs" placeholder="-y pacote-do-servidor C:\pasta" spellcheck="false" />
+              </label>
+              <label class="field">
+                <span>Variáveis de ambiente, uma por linha (CHAVE=valor)</span>
+                <textarea id="mEnv" rows="3" spellcheck="false"></textarea>
+              </label>
+            </div>
+            <div id="mHttp" hidden>
+              <label class="field">
+                <span>Endereço</span>
+                <input id="mUrl" placeholder="https://exemplo.com/mcp" spellcheck="false" />
+              </label>
+              <label class="field">
+                <span>Cabeçalhos, um por linha (Nome: valor)</span>
+                <textarea id="mHeaders" rows="3" spellcheck="false"></textarea>
+                <small>Servidores que exigem login por navegador (OAuth) ainda não são suportados: use um token.</small>
+              </label>
+            </div>
+            <label class="check"><input id="mEnabled" type="checkbox" /><span>Ativo</span></label>
+            <label class="check">
+              <input id="mTrust" type="checkbox" />
+              <span>Confiar: executar qualquer ferramenta deste servidor sem pedir confirmação</span>
+            </label>
+            <div class="row">
+              <button id="mSave" class="pill">Salvar</button>
+              <button id="mReconnect" class="ghost">Reconectar</button>
+              <button id="mDelete" class="ghost danger">Excluir</button>
+            </div>
+            <div id="mStatus" class="hint"></div>
+            <div id="mTools" class="rows"></div>
+          </div>
         </div>
       </section>
 

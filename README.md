@@ -45,8 +45,31 @@ Tudo passa pelo OpenRouter, então qualquer modelo da lista serve para as respos
 
 Os dados ficam em `%APPDATA%\aside` (`settings.json` e `aside.db`).
 
+## Modo local
+
+Na aba Local dos Ajustes dá para rodar tudo neste computador, sem chave:
+
+- Transcrição com whisper.cpp. Instale o motor, baixe um modelo e escolha "Whisper local".
+- Respostas com llama.cpp. Instale o motor, baixe ou aponte um arquivo `.gguf` e escolha "Modelo local".
+
+Os motores vêm das builds oficiais no GitHub e os modelos do Hugging Face. Tudo fica em `%APPDATA%\aside\local`. O modelo local não lê imagens.
+
+## Ferramentas (MCP)
+
+Na aba Ferramentas você cadastra servidores MCP, por comando local (stdio) ou endereço HTTP. Quando você faz uma pergunta, o modelo pode chamar essas ferramentas. Ferramentas marcadas como só leitura rodam direto; as outras pedem confirmação, a menos que o servidor esteja marcado como de confiança. Sugestões automáticas não usam ferramentas.
+
+A configuração dos servidores fica cifrada, porque pode conter tokens.
+
+## Testes de desenvolvimento
+
+```bash
+ASIDE_MCP_TEST=1 npx electron .
+```
+
+Conecta ao servidor de exemplo em `dev/mcp-test-server.js` e roda o laço de ferramentas contra um provedor falso.
+
 ## Ainda não tem
 
-- Transcrição e modelo locais (whisper.cpp e llama.cpp).
-- Ferramentas conectadas via MCP.
+- Login por navegador (OAuth) em servidores MCP remotos.
+- Ferramentas MCP com o modelo local.
 - Instalador.

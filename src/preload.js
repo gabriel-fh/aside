@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const invoke = (channel) => (...args) => ipcRenderer.invoke(channel, ...args);
 
-const EVENTS = ['local', 'settings', 'session', 'transcript', 'answer:start', 'answer:delta', 'answer:end', 'status', 'cmd'];
+const EVENTS = ['mcp', 'local', 'settings', 'session', 'transcript', 'answer:start', 'answer:delta', 'answer:end', 'status', 'cmd'];
 
 contextBridge.exposeInMainWorld('aside', {
   getSettings: invoke('settings:get'),
@@ -27,6 +27,10 @@ contextBridge.exposeInMainWorld('aside', {
   historySummarize: invoke('history:summarize'),
   historyExport: invoke('history:export'),
   pickFolder: invoke('dialog:folder'),
+
+  mcpGet: invoke('mcp:get'),
+  mcpSave: invoke('mcp:save'),
+  mcpReconnect: invoke('mcp:reconnect'),
 
   localStatus: invoke('local:status'),
   localInstall: invoke('local:install'),

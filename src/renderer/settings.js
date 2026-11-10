@@ -34,6 +34,7 @@
     for (const page of document.querySelectorAll('.page')) page.hidden = page.id !== `tab-${name}`;
     if (name === 'historico') loadHistory();
     if (name === 'local') refreshLocal();
+    if (name === 'ferramentas') refreshMcp();
   }
   for (const button of document.querySelectorAll('.tab')) {
     button.addEventListener('click', () => showTab(button.dataset.tab));
@@ -263,6 +264,128 @@
   api.on('local', (state) => {
     localState = state;
     renderLocal();
+  });
+
+  /* ---------- ferramentas (MCP) ---------- */
+
+  let mcpServers = [];
+  let mcpStatus = [];
+  let selectedServer = null;
+  const STATE_LABEL = { off: 'Desativado', connecting: 'Conectando...', ready: 'Conectado', error: 'Com erro' };
+
+  const statusOf = (id) => mcpStatus.find((s) => s.id === id) || { state: 'connecting', error: '', tools: [] };
+
+  function renderServerStatus() {
+    const server = mcpServers.find((s) => s.id === selectedServer);
+    if (!server) return;
+    const st = statusOf(server.id);
+    $('mStatus').textContent =
+      st.state === 'error' ? `Erro: ${st.error}` : `${STATE_LABEL[st.state]}. ${st.tools.length} ferramentas.`;
+    $('mTools').replaceChildren(
+      ...st.tools.map((t) => lrow(t.name, t.description.slice(0, 90), [t.readOnly ? 'só leitura' : 'pede confirmação']))
+    );
+  }
+
+  function renderServers(fillForm) {
+    if (!mcpServers.some((s) => s.id === selectedServer)) {
+      selectedServer = mcpServers.length ? mcpServers[0].id : null;
+      fillForm = true;
+    }
+    $('serverList').replaceChildren(
+      ...mcpServers.map((s) => {
+        const item = document.createElement('button');
+        item.className = `item${s.id === selectedServer ? ' on' : ''}`;
+        const name = document.createElement('strong');
+        name.textContent = s.name;
+        const note = document.createElement('span');
+        note.textContent = STATE_LABEL[statusOf(s.id).state];
+        item.append(name, note);
+        item.addEventListener('click', () => {
+          selectedServer = s.id;
+          renderServers(true);
+        });
+        return item;
+      })
+    );
+    const server = mcpServers.find((s) => s.id === selectedServer);
+    $('mEmpty').hidden = Boolean(server);
+    $('mDetail').hidden = !server;
+    if (!server) return;
+    if (fillForm) {
+      $('mName').value = server.name;
+      $('mType').value = server.type;
+      $('mCommand').value = server.command || '';
+      $('mArgs').value = server.args || '';
+      $('mEnv').value = server.env || '';
+      $('mUrl').value = server.url || '';
+      $('mHeaders').value = server.headers || '';
+      $('mEnabled').checked = Boolean(server.enabled);
+      $('mTrust').checked = Boolean(server.trust);
+      showServerType();
+    }
+    renderServerStatus();
+  }
+
+  function showServerType() {
+    const http = $('mType').value === 'http';
+    $('mStdio').hidden = http;
+    $('mHttp').hidden = !http;
+  }
+  $('mType').addEventListener('change', showServerType);
+
+  function applyMcp(state, fillForm) {
+    mcpServers = state.servers;
+    mcpStatus = state.status;
+    renderServers(fillForm);
+  }
+
+  async function refreshMcp() {
+    const state = await guard(() => api.mcpGet());
+    if (state) applyMcp(state, true);
+  }
+
+  $('newServer').addEventListener('click', () =>
+    guard(async () => {
+      const id = `m${Date.now().toString(36)}`;
+      selectedServer = id;
+      const server = { id, name: 'Novo servidor', type: 'stdio', command: '', args: '', env: '', url: '', headers: '', enabled: false, trust: false };
+      applyMcp(await api.mcpSave([...mcpServers, server]), true);
+      $('mName').focus();
+      $('mName').select();
+    })
+  );
+  $('mSave').addEventListener('click', () =>
+    guard(async () => {
+      const next = mcpServers.map((s) =>
+        s.id === selectedServer
+          ? {
+              ...s,
+              name: $('mName').value.trim() || 'Sem nome',
+              type: $('mType').value,
+              command: $('mCommand').value.trim(),
+              args: $('mArgs').value.trim(),
+              env: $('mEnv').value,
+              url: $('mUrl').value.trim(),
+              headers: $('mHeaders').value,
+              enabled: $('mEnabled').checked,
+              trust: $('mTrust').checked,
+            }
+          : s
+      );
+      applyMcp(await api.mcpSave(next), true);
+      toast('Servidor salvo.');
+    })
+  );
+  $('mReconnect').addEventListener('click', () => guard(async () => applyMcp(await api.mcpReconnect(selectedServer), false)));
+  $('mDelete').addEventListener('click', () =>
+    guard(async () => {
+      if (!confirm('Excluir este servidor?')) return;
+      applyMcp(await api.mcpSave(mcpServers.filter((s) => s.id !== selectedServer)), true);
+    })
+  );
+  api.on('mcp', (status) => {
+    mcpStatus = status;
+    renderServers(false);
   });
 
   /* ---------- assistentes ---------- */

@@ -315,6 +315,26 @@ select {
   flex: 1;
 }
 
+#mDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#mDetail[hidden] {
+  display: none;
+}
+
+#mDetail > .row {
+  margin: 6px 0 10px;
+}
+
+.list-col > .hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 #hDetail {
   display: flex;
   flex-direction: column;

@@ -69,13 +69,13 @@ function save() {
 }
 
 function publicView() {
-  const { apiKeyEnc, ...rest } = load();
+  const { apiKeyEnc, mcpEnc, ...rest } = load();
   return { ...rest, hasKey: Boolean(apiKeyEnc) };
 }
 
 function update(patch) {
   load();
-  const { apiKeyEnc, hasKey, ...safe } = patch || {};
+  const { apiKeyEnc, mcpEnc, hasKey, ...safe } = patch || {};
   Object.assign(cache, safe);
   save();
   return publicView();
@@ -106,4 +106,25 @@ function getApiKey() {
   }
 }
 
-module.exports = { DEFAULTS, load, publicView, update, setApiKey, getApiKey };
+// Servidores MCP: a configuracao pode conter tokens, entao fica toda cifrada.
+function getMcpServers() {
+  load();
+  if (!cache.mcpEnc) return [];
+  try {
+    const list = JSON.parse(safeStorage.decryptString(Buffer.from(cache.mcpEnc, 'base64')));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function setMcpServers(list) {
+  load();
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('O cofre de credenciais do sistema não está disponível.');
+  }
+  cache.mcpEnc = safeStorage.encryptString(JSON.stringify(list || [])).toString('base64');
+  save();
+}
+
+module.exports = { DEFAULTS, load, publicView, update, setApiKey, getApiKey, getMcpServers, setMcpServers };
