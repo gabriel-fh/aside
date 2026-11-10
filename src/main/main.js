@@ -606,8 +606,9 @@ async function ask({
         return await run(useImage);
       } catch (error) {
         if (streamed || controller.signal.aborted) throw error;
-        // No modo combinado, limite da nuvem nao trava a resposta: o modelo deste computador assume.
-        if (/\b429\b/.test(error.message) && hybridOn() && !target.local) {
+        // Limite da nuvem numa pergunta falada: o modelo deste computador assume na hora.
+        // Em codigo, tela e desafio vale mais esperar a nuvem: os modelos locais pequenos erram demais nisso.
+        if (/\b429\b/.test(error.message) && hybridOn() && !target.local && !heavy) {
           const fallback = await localTarget().catch(() => null);
           if (fallback) {
             status('info', 'Limite da nuvem atingido: respondendo com o modelo deste computador.');
