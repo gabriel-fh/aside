@@ -1,0 +1,13 @@
+{
+  "name": "aside",
+  "version": "0.1.0",
+  "description": "Assistente flutuante que acompanha reunioes, aulas e estudo em tempo real",
+  "main": "src/main/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^45.2.3"
+  }
+}

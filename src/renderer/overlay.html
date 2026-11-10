@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' blob:; style-src 'self'; img-src 'self' data:; media-src 'self' blob:"
+    />
+    <title>Aside</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body>
+    <div id="root">
+      <div id="bar" class="solid">
+        <div id="drag" title="Arraste para mover">
+          <img src="../../assets/logo.png" alt="" />
+          <span>Aside</span>
+        </div>
+        <button id="rec" class="pill" title="Iniciar ou parar a sessão">
+          <span class="dot"></span><span id="recLabel">Iniciar</span>
+        </button>
+        <div class="meters" title="Níveis: você e o áudio do computador">
+          <span class="meter"><i id="mMe"></i></span>
+          <span class="meter"><i id="mThem"></i></span>
+        </div>
+        <select id="assistant" title="Assistente ativo"></select>
+        <button id="askBtn" class="ghost" title="Perguntar com base na conversa">Perguntar</button>
+        <button id="screenBtn" class="ghost" title="Analisar a tela">Tela</button>
+        <button id="trBtn" class="ghost" title="Mostrar ou ocultar a transcrição">Transcrição</button>
+        <button id="cfgBtn" class="ghost" title="Ajustes">Ajustes</button>
+        <button id="hideBtn" class="ghost icon" title="Ocultar">&times;</button>
+      </div>
+
+      <div id="panel" class="solid">
+        <div id="status" hidden></div>
+        <div id="question" hidden></div>
+        <div id="answer" class="md"><p class="hint">Inicie uma sessão ou escreva uma pergunta.</p></div>
+        <div id="transcript" hidden></div>
+        <form id="form">
+          <input id="q" type="text" placeholder="Pergunte algo" autocomplete="off" />
+          <button id="stopBtn" type="button" class="ghost" hidden>Parar</button>
+          <button type="submit" class="pill">Enviar</button>
+        </form>
+      </div>
+    </div>
+    <script src="md.js"></script>
+    <script src="audio.js"></script>
+    <script src="overlay.js"></script>
+  </body>
+</html>

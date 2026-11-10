@@ -1,0 +1,144 @@
+:root {
+  --bg: #0c0c0d;
+  --surface: #161618;
+  --surface-2: #1f1f22;
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #f4f4f5;
+  --muted: #9a9aa2;
+  --accent: #ffffff;
+  --danger: #ff6b6b;
+  --ok: #5ad19a;
+  --radius: 12px;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 0;
+  background: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 1px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill:hover {
+  background: #dcdcdc;
+}
+
+.ghost {
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ghost:hover,
+.ghost.on {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.md {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md pre {
+  margin: 0 0 10px;
+}
+
+.md h2,
+.md h3,
+.md h4,
+.md h5 {
+  margin: 14px 0 6px;
+  font-size: 1.05em;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md ul,
+.md ol {
+  padding-left: 20px;
+}
+
+.md code {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.92em;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.md pre {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.md pre code {
+  background: none;
+  padding: 0;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+}

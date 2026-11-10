@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:"
+    />
+    <title>Aside</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <aside id="nav">
+      <div class="brand"><img src="../../assets/logo.png" alt="" /><span>Aside</span></div>
+      <button data-tab="geral" class="tab on">Geral</button>
+      <button data-tab="assistentes" class="tab">Assistentes</button>
+      <button data-tab="historico" class="tab">Histórico</button>
+      <button data-tab="atalhos" class="tab">Atalhos</button>
+      <div id="toast" hidden></div>
+    </aside>
+
+    <main>
+      <section id="tab-geral" class="page">
+        <h1>Geral</h1>
+
+        <div class="group">
+          <h2>OpenRouter</h2>
+          <label class="field">
+            <span>Chave de API <em id="keyState"></em></span>
+            <div class="row">
+              <input id="apiKey" type="password" placeholder="sk-or-..." autocomplete="off" />
+              <button id="saveKey" class="pill">Salvar</button>
+              <button id="clearKey" class="ghost">Remover</button>
+            </div>
+            <small>Fica cifrada no cofre de credenciais do Windows. Não sai deste computador, exceto nas chamadas ao OpenRouter.</small>
+          </label>
+          <label class="field">
+            <span>Modelo de respostas</span>
+            <input id="chatModel" list="allModels" spellcheck="false" />
+            <small id="chatModelInfo"></small>
+          </label>
+          <label class="field">
+            <span>Modelo de transcrição (precisa aceitar áudio)</span>
+            <input id="transcribeModel" list="audioModels" spellcheck="false" />
+            <small id="transcribeModelInfo"></small>
+          </label>
+          <datalist id="allModels"></datalist>
+          <datalist id="audioModels"></datalist>
+        </div>
+
+        <div class="group">
+          <h2>Idioma</h2>
+          <label class="field"><span>Idioma falado na conversa</span><input id="language" /></label>
+          <label class="field"><span>Idioma das respostas</span><input id="responseLanguage" /></label>
+          <label class="field">
+            <span>Tradução ao vivo para</span>
+            <input id="translateTo" placeholder="vazio desliga a tradução" />
+          </label>
+        </div>
+
+        <div class="group">
+          <h2>Captura</h2>
+          <label class="check"><input id="captureMic" type="checkbox" /><span>Capturar microfone (Eu)</span></label>
+          <label class="check"><input id="captureSystem" type="checkbox" /><span>Capturar áudio do computador (Eles)</span></label>
+          <label class="check">
+            <input id="speakerMode" type="checkbox" />
+            <span>Estou sem fone: ignorar no microfone o som que sai dos alto-falantes</span>
+          </label>
+        </div>
+
+        <div class="group">
+          <h2>Comportamento</h2>
+          <label class="check"><input id="autoInsights" type="checkbox" /><span>Sugerir resposta sozinho quando fizerem uma pergunta</span></label>
+          <label class="check"><input id="autoSummary" type="checkbox" /><span>Gerar resumo ao encerrar a sessão</span></label>
+          <label class="check">
+            <input id="stealth" type="checkbox" />
+            <span>Modo stealth: as janelas não aparecem em capturas nem em compartilhamento de tela, e saem da barra de tarefas</span>
+          </label>
+          <label class="field">
+            <span>Opacidade do overlay</span>
+            <input id="opacity" type="range" min="0.4" max="1" step="0.02" />
+          </label>
+        </div>
+
+        <div class="group">
+          <h2>Obsidian</h2>
+          <label class="field">
+            <span>Pasta do cofre</span>
+            <div class="row">
+              <input id="obsidianVault" placeholder="vazio: perguntar onde salvar a cada exportação" />
+              <button id="pickVault" class="ghost">Escolher</button>
+            </div>
+            <small>As sessões exportadas vão para a subpasta Aside.</small>
+          </label>
+        </div>
+      </section>
+
+      <section id="tab-assistentes" class="page split" hidden>
+        <div class="list-col">
+          <div class="list-head"><h1>Assistentes</h1><button id="newAssistant" class="pill">Novo</button></div>
+          <div id="assistantList" class="list"></div>
+        </div>
+        <div class="detail-col">
+          <label class="field"><span>Nome</span><input id="aName" /></label>
+          <label class="field grow">
+            <span>Instruções</span>
+            <textarea id="aPrompt" spellcheck="false"></textarea>
+          </label>
+          <div class="row">
+            <button id="aSave" class="pill">Salvar</button>
+            <button id="aUse" class="ghost">Usar este</button>
+            <button id="aDelete" class="ghost danger">Excluir</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-historico" class="page split" hidden>
+        <div class="list-col">
+          <div class="list-head"><h1>Histórico</h1></div>
+          <input id="hSearch" type="search" placeholder="Buscar em títulos, resumos e falas" />
+          <div id="historyList" class="list"></div>
+        </div>
+        <div class="detail-col">
+          <div id="hEmpty" class="hint">Selecione uma sessão.</div>
+          <div id="hDetail" hidden>
+            <div class="row wrap">
+              <h2 id="hTitle"></h2>
+              <span class="spacer"></span>
+              <button id="hSummarize" class="ghost">Resumir</button>
+              <button id="hExport" class="ghost">Exportar</button>
+              <button id="hDelete" class="ghost danger">Excluir</button>
+            </div>
+            <div id="hMeta" class="hint"></div>
+            <div id="hSummary" class="md"></div>
+            <div id="hEntries"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-atalhos" class="page" hidden>
+        <h1>Atalhos</h1>
+        <p class="hint">
+          Atalhos globais, no formato do Electron: modificadores e tecla unidos por +, como Control+Shift+Space. Deixe vazio para desativar.
+        </p>
+        <div id="shortcutList" class="group"></div>
+        <div class="row"><button id="saveShortcuts" class="pill">Salvar atalhos</button></div>
+      </section>
+    </main>
+    <script src="md.js"></script>
+    <script src="settings.js"></script>
+  </body>
+</html>
