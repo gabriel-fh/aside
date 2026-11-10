@@ -388,59 +388,105 @@
     renderServers(false);
   });
 
-  /* ---------- assistentes ---------- */
+  /* ---------- modos ---------- */
 
   let selectedAssistant = null;
+  let formAssistant = null;
+  let draftFiles = [];
 
-  function renderAssistants() {
+  function renderFiles() {
+    const rows = draftFiles.map((file, index) =>
+      lrow(file.name, `${Math.max(1, Math.round(file.text.length / 1000))} mil caracteres${file.truncated ? ', cortado' : ''}`, [
+        button('Remover', () => {
+          draftFiles = draftFiles.filter((_f, i) => i !== index);
+          renderFiles();
+        }, true),
+      ])
+    );
+    $('aFiles').replaceChildren(...rows);
+  }
+
+  function renderAssistants(forceFill) {
     if (!settings.assistants.some((a) => a.id === selectedAssistant)) {
       selectedAssistant = settings.activeAssistantId;
     }
     $('assistantList').replaceChildren(
       ...settings.assistants.map((a) => {
-        const button = document.createElement('button');
-        button.className = `item${a.id === selectedAssistant ? ' on' : ''}`;
+        const item = document.createElement('button');
+        item.className = `item${a.id === selectedAssistant ? ' on' : ''}`;
         const name = document.createElement('strong');
         name.textContent = a.name;
         const note = document.createElement('span');
-        note.textContent = a.id === settings.activeAssistantId ? 'Em uso' : ' ';
-        button.append(name, note);
-        button.addEventListener('click', () => {
+        const files = Array.isArray(a.files) ? a.files.length : 0;
+        const bits = [];
+        if (a.id === settings.activeAssistantId) bits.push('Em uso');
+        if (a.context && a.context.trim()) bits.push('anotações');
+        if (files) bits.push(files === 1 ? '1 arquivo' : `${files} arquivos`);
+        note.textContent = bits.join(', ') || ' ';
+        item.append(name, note);
+        item.addEventListener('click', () => {
           selectedAssistant = a.id;
-          renderAssistants();
+          renderAssistants(true);
         });
-        return button;
+        return item;
       })
     );
+    // O formulario so e recarregado ao trocar de modo ou apos salvar, para nao apagar o que esta sendo digitado.
+    if (!forceFill && formAssistant === selectedAssistant) return;
     const current = settings.assistants.find((a) => a.id === selectedAssistant);
-    if (current && document.activeElement !== $('aName') && document.activeElement !== $('aPrompt')) {
-      $('aName').value = current.name;
-      $('aPrompt').value = current.prompt;
-    }
+    if (!current) return;
+    formAssistant = selectedAssistant;
+    $('aName').value = current.name;
+    $('aPrompt').value = current.prompt || '';
+    $('aContext').value = current.context || '';
+    draftFiles = Array.isArray(current.files) ? current.files.slice() : [];
+    renderFiles();
   }
 
   $('newAssistant').addEventListener('click', () =>
     guard(async () => {
       const id = `a${Date.now().toString(36)}`;
       selectedAssistant = id;
-      await api.setSettings({ assistants: [...settings.assistants, { id, name: 'Novo assistente', prompt: '' }] });
+      await api.setSettings({
+        assistants: [...settings.assistants, { id, name: 'Novo modo', prompt: '', context: '', files: [] }],
+      });
       $('aName').focus();
       $('aName').select();
     })
   );
+  $('aAddFiles').addEventListener('click', () =>
+    guard(async () => {
+      const picked = await api.pickContextFiles();
+      const failed = [];
+      for (const file of picked) {
+        if (file.error) failed.push(`${file.name}: ${file.error}`);
+        else draftFiles = [...draftFiles.filter((f) => f.name !== file.name), file];
+      }
+      renderFiles();
+      if (failed.length) toast(failed.join(' '), true);
+      else if (picked.length) toast('Arquivos adicionados. Clique em Salvar para gravar.');
+    })
+  );
   $('aSave').addEventListener('click', () =>
     guard(async () => {
-      const name = $('aName').value.trim() || 'Sem nome';
-      const prompt = $('aPrompt').value.trim();
-      const assistants = settings.assistants.map((a) => (a.id === selectedAssistant ? { ...a, name, prompt } : a));
-      await api.setSettings({ assistants });
-      toast('Assistente salvo.');
+      const patch = {
+        name: $('aName').value.trim() || 'Sem nome',
+        prompt: $('aPrompt').value.trim(),
+        context: $('aContext').value.trim(),
+        files: draftFiles.map((f) => ({ name: f.name, text: f.text, truncated: Boolean(f.truncated) })),
+      };
+      formAssistant = null;
+      await api.setSettings({
+        assistants: settings.assistants.map((a) => (a.id === selectedAssistant ? { ...a, ...patch } : a)),
+      });
+      toast('Modo salvo.');
     })
   );
   $('aUse').addEventListener('click', () => guard(() => api.setSettings({ activeAssistantId: selectedAssistant })));
   $('aDelete').addEventListener('click', () =>
     guard(async () => {
-      if (settings.assistants.length <= 1) return toast('Mantenha pelo menos um assistente.', true);
+      if (settings.assistants.length <= 1) return toast('Mantenha pelo menos um modo.', true);
+      if (!confirm('Excluir este modo e o contexto dele?')) return;
       const assistants = settings.assistants.filter((a) => a.id !== selectedAssistant);
       const patch = { assistants };
       if (settings.activeAssistantId === selectedAssistant) patch.activeAssistantId = assistants[0].id;

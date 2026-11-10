@@ -19,12 +19,15 @@ const db = require('./db');
 const openrouter = require('./openrouter');
 const local = require('./local');
 const mcp = require('./mcp');
+const { extractFile } = require('./context');
 const { SPEAKER_LABEL, buildChatMessages, buildSummaryMessages } = require('./prompts');
 
 const ROOT = path.join(__dirname, '..', '..');
 const LOGO = path.join(ROOT, 'assets', 'logo.png');
 const PRELOAD = path.join(__dirname, '..', 'preload.js');
 const SHOT_DIR = process.env.ASIDE_SHOT_DIR || '';
+
+const OVERLAY_SIZE = { width: 780, height: 640 };
 
 let overlay = null;
 let settingsWin = null;
@@ -88,8 +91,7 @@ function sessionState() {
 
 function createOverlay() {
   const area = screen.getPrimaryDisplay().workArea;
-  const width = 760;
-  const height = 580;
+  const { width, height } = OVERLAY_SIZE;
   overlay = new BrowserWindow({
     width,
     height,
@@ -158,8 +160,10 @@ function toggleOverlay() {
 
 function moveOverlay(dx, dy) {
   if (!overlay) return;
+  // Com escala de tela no Windows, mover so pela posicao faz a janela crescer a cada passo.
+  // Reafirmar o tamanho junto com a posicao evita isso.
   const [x, y] = overlay.getPosition();
-  overlay.setPosition(Math.round(x + dx), Math.round(y + dy));
+  overlay.setBounds({ x: Math.round(x + dx), y: Math.round(y + dy), ...OVERLAY_SIZE });
 }
 
 // Modo stealth: as janelas somem de capturas e compartilhamento de tela, e da barra de tarefas.
@@ -288,8 +292,8 @@ async function ask({ text = '', withScreen = false, auto = false } = {}) {
   let full = '';
   try {
     if (withScreen && useLocal) status('info', 'O modelo local não lê imagens: a tela foi ignorada.');
-    const imageDataUrl = withScreen && !useLocal ? await captureScreen() : null;
     const target = await chatTarget();
+    const imageDataUrl = withScreen && !useLocal ? await captureScreen() : null;
     const messages = buildChatMessages({
       assistant,
       responseLanguage: s.responseLanguage,
@@ -297,6 +301,7 @@ async function ask({ text = '', withScreen = false, auto = false } = {}) {
       turns: live.turns,
       request,
       imageDataUrl,
+      contextLimit: target.local ? 12000 : 120000,
     });
     // Ferramentas so em perguntas feitas pelo usuario e com modelo na nuvem.
     const tools = auto || target.local ? [] : mcp.toolsForModel();
@@ -542,6 +547,18 @@ function registerIpc() {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  ipcMain.handle('context:pick', async () => {
+    const result = await dialog.showOpenDialog(settingsWin || undefined, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Documentos', extensions: ['pdf', 'docx', 'txt', 'md', 'csv', 'json'] },
+        { name: 'Todos os arquivos', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled) return [];
+    return Promise.all(result.filePaths.map(extractFile));
+  });
+
   ipcMain.handle('mcp:get', () => mcpState());
   ipcMain.handle('mcp:save', (_e, servers) => {
     settings.setMcpServers(servers);
@@ -585,6 +602,12 @@ function registerIpc() {
 // Uso em desenvolvimento: salva imagens das janelas com dados de exemplo e encerra.
 async function devShots() {
   fs.mkdirSync(SHOT_DIR, { recursive: true });
+  // Arrastar nao pode mudar o tamanho da janela, mesmo com escala de tela.
+  const before = overlay.getBounds();
+  for (let i = 0; i < 300; i++) moveOverlay(i % 2 ? 3 : -2, 1);
+  moveOverlay(-150, -300);
+  const after = overlay.getBounds();
+  console.log('[arraste] escala', screen.getPrimaryDisplay().scaleFactor, 'antes', before.width, before.height, 'depois', after.width, after.height);
   openSettings(process.env.ASIDE_SHOT_TAB || undefined);
   await new Promise((r) => setTimeout(r, 1800));
   broadcast('session', { active: true, id: 0, startedAt: Date.now() });
@@ -645,7 +668,11 @@ if (!app.requestSingleInstanceLock()) {
     registerShortcuts();
     applyStealth();
 
-    if (process.env.ASIDE_MCP_TEST) {
+    if (process.env.ASIDE_CTX_TEST) {
+      require('./dev')
+        .contextTest({ extractFile, dir: process.env.ASIDE_CTX_TEST })
+        .finally(() => app.quit());
+    } else if (process.env.ASIDE_MCP_TEST) {
       require('./dev')
         .mcpTest({ mcp, openrouter })
         .finally(() => app.quit());

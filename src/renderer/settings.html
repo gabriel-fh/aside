@@ -16,7 +16,7 @@
       <button data-tab="geral" class="tab on">Geral</button>
       <button data-tab="local" class="tab">Local</button>
       <button data-tab="ferramentas" class="tab">Ferramentas</button>
-      <button data-tab="assistentes" class="tab">Assistentes</button>
+      <button data-tab="assistentes" class="tab">Modos</button>
       <button data-tab="historico" class="tab">Histórico</button>
       <button data-tab="atalhos" class="tab">Atalhos</button>
       <div id="toast" hidden></div>
@@ -203,18 +203,34 @@
 
       <section id="tab-assistentes" class="page split" hidden>
         <div class="list-col">
-          <div class="list-head"><h1>Assistentes</h1><button id="newAssistant" class="pill">Novo</button></div>
+          <div class="list-head"><h1>Modos</h1><button id="newAssistant" class="pill">Novo</button></div>
+          <p class="hint">Cada modo tem instruções e contexto próprios. Troque de modo pela barra flutuante.</p>
           <div id="assistantList" class="list"></div>
         </div>
         <div class="detail-col">
           <label class="field"><span>Nome</span><input id="aName" /></label>
-          <label class="field grow">
-            <span>Instruções</span>
-            <textarea id="aPrompt" spellcheck="false"></textarea>
+          <label class="field">
+            <span>Instruções: como o assistente deve agir neste modo</span>
+            <textarea id="aPrompt" rows="7" spellcheck="false"></textarea>
           </label>
-          <div class="row">
+          <label class="field">
+            <span>Contexto escrito: o que ele precisa saber</span>
+            <textarea
+              id="aContext"
+              rows="6"
+              placeholder="Ex.: vaga de desenvolvedor pleno na empresa X, pauta da reunião, pontos que quero cobrir..."
+            ></textarea>
+          </label>
+          <div class="field">
+            <span>Arquivos de contexto (PDF, DOCX ou texto)</span>
+            <div id="aFiles" class="rows"></div>
+            <div class="row"><button id="aAddFiles" class="ghost add">+ Adicionar arquivos</button></div>
+            <small>O texto dos arquivos é extraído e guardado neste computador. Ele vai junto em cada pergunta deste modo.</small>
+          </div>
+          <div class="row sticky">
             <button id="aSave" class="pill">Salvar</button>
-            <button id="aUse" class="ghost">Usar este</button>
+            <button id="aUse" class="ghost">Usar este modo</button>
+            <span class="spacer"></span>
             <button id="aDelete" class="ghost danger">Excluir</button>
           </div>
         </div>

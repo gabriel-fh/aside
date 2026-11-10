@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('aside', {
   historyExport: invoke('history:export'),
   pickFolder: invoke('dialog:folder'),
 
+  pickContextFiles: invoke('context:pick'),
   mcpGet: invoke('mcp:get'),
   mcpSave: invoke('mcp:save'),
   mcpReconnect: invoke('mcp:reconnect'),

@@ -11,6 +11,7 @@
     "electron": "^45.2.3"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.2"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "pdfjs-dist": "^6.5.438"
   }
 }

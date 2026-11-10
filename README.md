@@ -9,7 +9,7 @@ Assistente flutuante para Windows que acompanha reuniões, aulas e sessões de e
 - Responde perguntas com base na conversa, e na tela quando você pede.
 - Sugere uma resposta sozinho quando alguém faz uma pergunta.
 - Tradução ao vivo das falas.
-- Assistentes com instruções próprias, editáveis.
+- Modos (Reunião, Entrevista, Estudo e código, Geral e os que você criar), cada um com instruções e contexto próprios: anotações escritas e arquivos PDF, DOCX ou texto.
 - Histórico local em SQLite, com busca, resumo e exportação em Markdown (inclusive para um cofre do Obsidian).
 - Modo stealth: as janelas somem de capturas e compartilhamento de tela, e da barra de tarefas.
 - Atalhos globais configuráveis.

@@ -17,30 +17,59 @@
           <img src="../../assets/logo.png" alt="" />
           <span>Aside</span>
         </div>
+        <span class="sep"></span>
         <button id="rec" class="pill" title="Iniciar ou parar a sessão">
           <span class="dot"></span><span id="recLabel">Iniciar</span>
         </button>
-        <div class="meters" title="Níveis: você e o áudio do computador">
+        <div class="meters" title="Níveis de áudio: você em cima, o computador embaixo">
           <span class="meter"><i id="mMe"></i></span>
           <span class="meter"><i id="mThem"></i></span>
         </div>
-        <select id="assistant" title="Assistente ativo"></select>
-        <button id="askBtn" class="ghost" title="Perguntar com base na conversa">Perguntar</button>
-        <button id="screenBtn" class="ghost" title="Analisar a tela">Tela</button>
-        <button id="trBtn" class="ghost" title="Mostrar ou ocultar a transcrição">Transcrição</button>
-        <button id="cfgBtn" class="ghost" title="Ajustes">Ajustes</button>
-        <button id="hideBtn" class="ghost icon" title="Ocultar">&times;</button>
+        <span class="sep"></span>
+        <select id="assistant" title="Modo ativo"></select>
+        <span class="grow"></span>
+        <button id="screenBtn" class="ghost" title="Analisar o que está na tela">
+          <svg class="ic" viewBox="0 0 16 16"><rect x="1.8" y="2.5" width="12.4" height="8.4" rx="1.4" /><path d="M5.5 13.8h5M8 11v2.8" /></svg>
+          Tela
+        </button>
+        <button id="cfgBtn" class="ghost icon" title="Ajustes">
+          <svg class="ic" viewBox="0 0 16 16"><path d="M2 4.5h6.5M12 4.5h2M2 11.5h2M7.5 11.5H14" /><circle cx="10.2" cy="4.5" r="1.7" /><circle cx="5.8" cy="11.5" r="1.7" /></svg>
+        </button>
+        <button id="foldBtn" class="ghost icon" title="Recolher ou expandir o painel">
+          <svg class="ic" viewBox="0 0 16 16"><path d="M4 6.5l4 4 4-4" /></svg>
+        </button>
+        <button id="hideBtn" class="ghost icon" title="Ocultar">
+          <svg class="ic" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
       </div>
 
       <div id="panel" class="solid">
+        <div id="head">
+          <div class="tabs">
+            <button id="tabAnswer" class="seg on">Resposta</button>
+            <button id="tabTranscript" class="seg">Transcrição</button>
+          </div>
+          <span class="grow"></span>
+          <span id="ctxBadge" hidden></span>
+        </div>
         <div id="status" hidden></div>
-        <div id="question" hidden></div>
-        <div id="answer" class="md"><p class="hint">Inicie uma sessão ou escreva uma pergunta.</p></div>
+        <div id="answerView">
+          <div id="question" hidden></div>
+          <div id="answer" class="md"></div>
+        </div>
         <div id="transcript" hidden></div>
+        <div id="chips">
+          <button class="chip" data-ask="O que é mais útil eu dizer agora?">O que dizer agora?</button>
+          <button class="chip" data-ask="Resuma a conversa até aqui em poucos pontos.">Resumir até aqui</button>
+          <button class="chip" data-ask="Quais perguntas eu deveria fazer agora?">Sugerir perguntas</button>
+          <button class="chip" data-screen="1">Analisar a tela</button>
+        </div>
         <form id="form">
           <input id="q" type="text" placeholder="Pergunte algo" autocomplete="off" />
           <button id="stopBtn" type="button" class="ghost" hidden>Parar</button>
-          <button type="submit" class="pill">Enviar</button>
+          <button id="sendBtn" type="submit" class="pill" title="Enviar">
+            <svg class="ic" viewBox="0 0 16 16"><path d="M8 13V3.5M3.8 7.5L8 3.3l4.2 4.2" /></svg>
+          </button>
         </form>
       </div>
     </div>

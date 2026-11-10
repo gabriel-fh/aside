@@ -60,6 +60,13 @@ function load() {
   if (!Array.isArray(cache.assistants) || cache.assistants.length === 0) {
     cache.assistants = DEFAULT_ASSISTANTS;
   }
+  // Modos padrao criados depois da primeira versao entram uma unica vez em instalacoes antigas.
+  if ((cache.seed || 0) < 2) {
+    if (!cache.assistants.some((a) => a.id === 'entrevista')) {
+      cache.assistants = [...cache.assistants, DEFAULT_ASSISTANTS.find((a) => a.id === 'entrevista')];
+    }
+    cache.seed = 2;
+  }
   return cache;
 }
 

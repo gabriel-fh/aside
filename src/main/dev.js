@@ -108,4 +108,55 @@ async function mcpTest({ mcp, openrouter }) {
   }
 }
 
-module.exports = { localTest, mcpTest };
+// ASIDE_CTX_TEST=<pasta>: gera um PDF e um DOCX de exemplo e confere a extracao de texto.
+async function contextTest({ extractFile, dir }) {
+  const { BrowserWindow } = require('electron');
+  const path = require('path');
+  const zlib = require('zlib');
+  const log = (...args) => console.log('[contexto]', ...args);
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    const win = new BrowserWindow({ show: false });
+    const html = '<h1>Currículo de teste</h1><p>Seis anos de experiência com Node e React.</p>';
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    const pdfPath = path.join(dir, 'exemplo.pdf');
+    fs.writeFileSync(pdfPath, await win.webContents.printToPDF({}));
+    win.destroy();
+    log('pdf:', JSON.stringify(await extractFile(pdfPath)));
+
+    // DOCX minimo: um ZIP com word/document.xml comprimido.
+    const name = Buffer.from('word/document.xml');
+    const xml = Buffer.from('<w:document><w:body><w:p><w:r><w:t>Vaga: pessoa desenvolvedora plena</w:t></w:r></w:p><w:p><w:r><w:t>Requisito: SQL &amp; APIs</w:t></w:r></w:p></w:body></w:document>');
+    const data = zlib.deflateRawSync(xml);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(xml.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(xml.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0);
+    end.writeUInt16LE(1, 8);
+    end.writeUInt16LE(1, 10);
+    end.writeUInt32LE(46 + name.length, 12);
+    end.writeUInt32LE(30 + name.length + data.length, 16);
+    const docxPath = path.join(dir, 'exemplo.docx');
+    fs.writeFileSync(docxPath, Buffer.concat([local, name, data, central, name, end]));
+    log('docx:', JSON.stringify(await extractFile(docxPath)));
+
+    const txtPath = path.join(dir, 'exemplo.txt');
+    fs.writeFileSync(txtPath, 'Pauta: orçamento do trimestre.');
+    log('txt:', JSON.stringify(await extractFile(txtPath)));
+    log('binário:', JSON.stringify(await extractFile(process.execPath)));
+  } catch (error) {
+    log('FALHOU:', error.message);
+  }
+}
+
+module.exports = { localTest, mcpTest, contextTest };

@@ -9,12 +9,15 @@
     mMe: $('mMe'),
     mThem: $('mThem'),
     assistant: $('assistant'),
-    askBtn: $('askBtn'),
     screenBtn: $('screenBtn'),
-    trBtn: $('trBtn'),
     cfgBtn: $('cfgBtn'),
+    foldBtn: $('foldBtn'),
     hideBtn: $('hideBtn'),
+    tabAnswer: $('tabAnswer'),
+    tabTranscript: $('tabTranscript'),
+    ctxBadge: $('ctxBadge'),
     status: $('status'),
+    answerView: $('answerView'),
     question: $('question'),
     answer: $('answer'),
     transcript: $('transcript'),
@@ -23,8 +26,13 @@
     stopBtn: $('stopBtn'),
   };
 
+  const EMPTY_ANSWER = '<p class="hint">Inicie uma sessão para acompanhar a conversa, ou escreva uma pergunta.</p>';
+  const EMPTY_TRANSCRIPT = '<p class="hint">A transcrição aparece aqui durante a sessão.</p>';
+
   let settings = null;
   let active = false;
+  let startedAt = 0;
+  let clock = null;
   let busy = false;
   let answerId = 0;
   let answerText = '';
@@ -57,7 +65,10 @@
   });
   el.drag.addEventListener('pointermove', (event) => {
     if (!dragging) return;
-    api.moveBy(event.screenX - last.x, event.screenY - last.y);
+    const dx = event.screenX - last.x;
+    const dy = event.screenY - last.y;
+    if (!dx && !dy) return;
+    api.moveBy(dx, dy);
     last = { x: event.screenX, y: event.screenY };
   });
   const endDrag = () => {
@@ -91,17 +102,61 @@
       })
     );
     el.assistant.value = next.activeAssistantId;
+
+    const mode = next.assistants.find((a) => a.id === next.activeAssistantId);
+    const files = mode && Array.isArray(mode.files) ? mode.files.length : 0;
+    const hasText = Boolean(mode && mode.context && mode.context.trim());
+    const parts = [];
+    if (hasText) parts.push('anotações');
+    if (files) parts.push(files === 1 ? '1 arquivo' : `${files} arquivos`);
+    el.ctxBadge.hidden = !parts.length;
+    el.ctxBadge.textContent = `Contexto: ${parts.join(' e ')}`;
+  }
+
+  function tick() {
+    const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const ss = String(seconds % 60).padStart(2, '0');
+    el.recLabel.textContent = `${mm}:${ss}`;
   }
 
   function applySession(state) {
     active = Boolean(state.active);
+    startedAt = state.startedAt || Date.now();
     el.rec.classList.toggle('live', active);
-    el.recLabel.textContent = active ? 'Parar' : 'Iniciar';
-    if (!active) {
+    clearInterval(clock);
+    if (active) {
+      tick();
+      clock = setInterval(tick, 1000);
+    } else {
+      el.recLabel.textContent = 'Iniciar';
       el.mMe.style.width = '0';
       el.mThem.style.width = '0';
     }
   }
+
+  /* ---------- painel ---------- */
+
+  function showView(name) {
+    const transcript = name === 'transcript';
+    el.answerView.hidden = transcript;
+    el.transcript.hidden = !transcript;
+    el.tabAnswer.classList.toggle('on', !transcript);
+    el.tabTranscript.classList.toggle('on', transcript);
+    if (transcript) el.transcript.scrollTop = el.transcript.scrollHeight;
+  }
+  el.tabAnswer.addEventListener('click', () => showView('answer'));
+  el.tabTranscript.addEventListener('click', () => showView('transcript'));
+
+  function setFolded(folded) {
+    el.root.classList.toggle('folded', folded);
+    try {
+      localStorage.setItem('folded', folded ? '1' : '');
+    } catch {
+      // sem armazenamento, o estado vale so para esta execucao
+    }
+  }
+  el.foldBtn.addEventListener('click', () => setFolded(!el.root.classList.contains('folded')));
 
   /* ---------- sessao ---------- */
 
@@ -110,11 +165,11 @@
     busy = true;
     try {
       if (settings.transcribeProvider !== 'local' && !settings.hasKey) {
-        showStatus('Informe a chave do OpenRouter em Ajustes.');
+        showStatus('Informe a chave do OpenRouter em Ajustes, ou ative a transcrição local.');
         api.openSettings('geral');
         return;
       }
-      el.transcript.replaceChildren();
+      el.transcript.innerHTML = EMPTY_TRANSCRIPT;
       await window.asideAudio.start({
         mic: settings.captureMic,
         system: settings.captureSystem,
@@ -150,6 +205,7 @@
   /* ---------- transcricao ---------- */
 
   function addLine(line) {
+    if (el.transcript.querySelector('.hint')) el.transcript.replaceChildren();
     const row = document.createElement('div');
     row.className = `line ${line.speaker}`;
     const who = document.createElement('span');
@@ -166,12 +222,6 @@
     el.transcript.scrollTop = el.transcript.scrollHeight;
   }
 
-  el.trBtn.addEventListener('click', () => {
-    el.transcript.hidden = !el.transcript.hidden;
-    el.trBtn.classList.toggle('on', !el.transcript.hidden);
-    el.transcript.scrollTop = el.transcript.scrollHeight;
-  });
-
   /* ---------- respostas ---------- */
 
   function renderAnswer() {
@@ -187,6 +237,8 @@
     el.question.hidden = false;
     el.answer.innerHTML = '<p class="hint">Pensando...</p>';
     el.stopBtn.hidden = false;
+    setFolded(false);
+    showView('answer');
   });
   api.on('answer:delta', ({ id, text }) => {
     if (id !== answerId) return;
@@ -205,19 +257,24 @@
     }
   });
 
+  function takeQuestion() {
+    const text = el.q.value.trim();
+    el.q.value = '';
+    return text;
+  }
+
   el.form.addEventListener('submit', (event) => {
     event.preventDefault();
-    const text = el.q.value.trim();
-    el.q.value = '';
-    api.ask({ text });
+    api.ask({ text: takeQuestion() });
   });
-  el.askBtn.addEventListener('click', () => api.ask({ text: el.q.value.trim() }));
-  el.screenBtn.addEventListener('click', () => {
-    const text = el.q.value.trim();
-    el.q.value = '';
-    api.ask({ text, withScreen: true });
-  });
+  el.screenBtn.addEventListener('click', () => api.ask({ text: takeQuestion(), withScreen: true }));
   el.stopBtn.addEventListener('click', () => api.cancelAsk());
+  for (const chip of document.querySelectorAll('.chip')) {
+    chip.addEventListener('click', () => {
+      if (chip.dataset.screen) api.ask({ text: takeQuestion(), withScreen: true });
+      else api.ask({ text: chip.dataset.ask });
+    });
+  }
 
   /* ---------- barra ---------- */
 
@@ -233,6 +290,13 @@
     if (cmd.type === 'toggle-session') (active ? stopSession : startSession)();
   });
 
+  el.answer.innerHTML = EMPTY_ANSWER;
+  el.transcript.innerHTML = EMPTY_TRANSCRIPT;
+  try {
+    if (localStorage.getItem('folded')) el.root.classList.add('folded');
+  } catch {
+    // segue expandido
+  }
   api.getSettings().then(applySettings);
   api.getSession().then(applySession);
 })();

@@ -40,7 +40,7 @@ body {
 }
 
 .tab.on {
-  background: var(--surface-2);
+  background: var(--accent-soft);
   color: var(--text);
 }
 
@@ -113,6 +113,7 @@ h2 {
 .field em {
   font-style: normal;
   color: var(--ok);
+  margin-left: 4px;
 }
 
 .field small {
@@ -133,7 +134,7 @@ textarea {
 }
 
 input[type='range'] {
-  accent-color: #fff;
+  accent-color: var(--accent);
 }
 
 textarea {
@@ -174,7 +175,7 @@ textarea {
 
 .check input {
   margin-top: 3px;
-  accent-color: #fff;
+  accent-color: var(--accent);
 }
 
 select {
@@ -224,6 +225,17 @@ select {
   font-size: 12px;
   padding: 0 6px;
   white-space: nowrap;
+}
+
+.add {
+  border: 1px dashed var(--line-strong);
+}
+
+.row.sticky {
+  position: sticky;
+  bottom: 0;
+  padding: 10px 0 2px;
+  background: var(--bg);
 }
 
 .danger:hover {
@@ -279,8 +291,8 @@ select {
 }
 
 .item.on {
-  background: var(--surface-2);
-  border-color: var(--line);
+  background: var(--accent-soft);
+  border-color: rgba(76, 141, 255, 0.35);
 }
 
 .item strong {
