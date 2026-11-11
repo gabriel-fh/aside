@@ -181,6 +181,8 @@
       ['ask', 'Responder à última pergunta'],
       ['screen', 'Analisar a tela inteira'],
       ['region', 'Analisar um trecho da tela'],
+    ['selection', 'Perguntar sobre o texto selecionado'],
+      ['selection', 'Perguntar sobre o texto selecionado'],
     ];
     $('homeShortcuts').replaceChildren(
       ...keys

@@ -2,6 +2,7 @@ const {
   app,
   BrowserWindow,
   Menu,
+  clipboard,
   Tray,
   desktopCapturer,
   dialog,
@@ -341,6 +342,7 @@ function registerShortcuts() {
     ask: () => (overlay ? overlay.webContents.send('cmd', { type: 'answer-now' }) : ask({ answerNow: true })),
     screen: () => ask({ withScreen: true }),
     region: () => askRegion(''),
+    selection: () => askSelection(),
     session: () => overlay && overlay.webContents.send('cmd', { type: 'toggle-session' }),
     up: () => moveOverlay(0, -40),
     down: () => moveOverlay(0, 40),
@@ -491,6 +493,67 @@ async function pickRegion() {
   });
 }
 
+/* ---------- texto selecionado ---------- */
+
+// Copia o que esta selecionado no programa em primeiro plano. O Windows nao oferece leitura direta da
+// selecao de outro programa: o caminho e mandar Ctrl+C e ler a area de transferencia.
+// O script espera as teclas do atalho serem soltas, senao o Ctrl+C chegaria como Ctrl+Shift+C.
+const COPY_SCRIPT = [
+  'Add-Type -AssemblyName System.Windows.Forms',
+  '$n = 0',
+  "while ([System.Windows.Forms.Control]::ModifierKeys -ne 'None' -and $n -lt 60) { Start-Sleep -Milliseconds 50; $n++ }",
+  "[System.Windows.Forms.SendKeys]::SendWait('^c')",
+].join('; ');
+
+function copySelection() {
+  const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  return new Promise((resolve, reject) => {
+    require('child_process').execFile(
+      powershell,
+      ['-NoProfile', '-NonInteractive', '-Command', COPY_SCRIPT],
+      { windowsHide: true, timeout: 8000 },
+      (error) => (error ? reject(new Error('Não consegui copiar o texto selecionado.')) : resolve())
+    );
+  });
+}
+
+let selectionBusy = false;
+async function askSelection() {
+  if (selectionBusy) return;
+  selectionBusy = true;
+  // O que estava na area de transferencia volta para la depois.
+  const image = clipboard.readImage();
+  const before = { text: clipboard.readText(), html: clipboard.readHTML() };
+  if (!image.isEmpty()) before.image = image;
+  try {
+    clipboard.clear();
+    await copySelection();
+    let picked = '';
+    for (let i = 0; i < 16 && !picked; i++) {
+      picked = clipboard.readText().trim();
+      if (!picked) await new Promise((r) => setTimeout(r, 50));
+    }
+    if (!picked) return status('error', 'Selecione um texto antes de usar o atalho.');
+    const cut = picked.slice(0, 8000);
+    await ask({
+      label: `Texto selecionado: ${cut.replace(/\s+/g, ' ').slice(0, 70)}${cut.length > 70 ? '...' : ''}`,
+      text: [
+        'Texto que o usuário selecionou na tela:',
+        '"""',
+        cut,
+        '"""',
+        'Se for uma pergunta ou um exercício, responda ou resolva. Se não for, explique o texto de forma direta.',
+      ].join('\n'),
+    });
+  } catch (error) {
+    status('error', error.message);
+  } finally {
+    if (before.text || before.html || before.image) clipboard.write(before);
+    else clipboard.clear();
+    selectionBusy = false;
+  }
+}
+
 async function askRegion(text) {
   try {
     const shot = await pickRegion();
@@ -568,6 +631,7 @@ async function ask({
   shot = null,
   step = null,
   cont = false,
+  label: customLabel = '',
 } = {}) {
   // `step` segue um desafio fixado: 'next', 'explain' ou 'check'. `cont` continua a ultima resposta.
   if (step && !task) return status('error', 'Não há desafio em andamento. Use Tela ou Recorte no enunciado.');
@@ -594,7 +658,8 @@ async function ask({
     ? lastAnswer.label
     : step
       ? STEP_LABEL[step]
-      : typed ||
+      : customLabel ||
+        typed ||
         (withScreen ? (shot ? 'Análise do recorte' : 'Análise da tela') : answerNow ? 'Responder agora' : 'O que vem agora?');
   const assistant = s.assistants.find((a) => a.id === s.activeAssistantId) || s.assistants[0];
   // Um pedido novo sobre a tela vira o desafio fixado. Os passos seguintes continuam esse desafio.

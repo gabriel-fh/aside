@@ -41,6 +41,7 @@ const DEFAULTS = {
     ask: 'Control+Shift+Enter',
     screen: 'Control+Shift+L',
     region: 'Control+Shift+X',
+    selection: 'Control+Shift+E',
     session: 'Control+Shift+K',
     up: 'Control+Alt+Up',
     down: 'Control+Alt+Down',

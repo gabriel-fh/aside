@@ -43,6 +43,7 @@ Tudo passa pelo OpenRouter, então qualquer modelo da lista serve para as respos
 | Iniciar ou parar a sessão | `Control+Shift+K` |
 | Perguntar com base na conversa | `Control+Shift+Enter` |
 | Analisar a tela | `Control+Shift+L` |
+| Perguntar sobre o texto selecionado | `Control+Shift+E` |
 | Mover o overlay | `Control+Alt+Setas` |
 
 ## Estrutura
