@@ -253,6 +253,7 @@
     'chatProvider',
     'customBase',
     'customModel',
+    'customBackupModel',
   ];
   const CHECK_FIELDS = ['captureMic', 'captureSystem', 'speakerMode', 'autoInsights', 'autoSummary', 'economy', 'hybridLocal', 'localFallback', 'stealth'];
 
@@ -274,6 +275,7 @@
     for (const id of TEXT_FIELDS) if (document.activeElement !== $(id)) $(id).value = settings[id] || '';
     for (const id of CHECK_FIELDS) $(id).checked = Boolean(settings[id]);
     $('opacity').value = settings.opacity;
+    if (document.activeElement !== $('dayTokenLimit')) $('dayTokenLimit').value = settings.dayTokenLimit || 0;
     $('keyState').textContent = settings.hasKey ? '(salva)' : '';
     $('customKeyState').textContent = settings.hasCustomKey ? '(salva)' : '';
     $('useCustom').checked = settings.chatProvider === 'custom';
@@ -287,6 +289,9 @@
     $(id).addEventListener('change', () => guard(() => api.setSettings({ [id]: $(id).checked })));
   }
   $('opacity').addEventListener('input', () => api.setSettings({ opacity: Number($('opacity').value) }));
+  $('dayTokenLimit').addEventListener('change', () =>
+    guard(() => api.setSettings({ dayTokenLimit: Math.max(0, Math.round(Number($('dayTokenLimit').value) || 0)) }))
+  );
 
   $('saveKey').addEventListener('click', () =>
     guard(async () => {

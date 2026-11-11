@@ -34,6 +34,8 @@ const DEFAULTS = {
   llamaContext: 8192,
   customBase: '',
   customModel: '',
+  customBackupModel: '',
+  dayTokenLimit: 200000,
   shortcuts: {
     toggle: 'Control+Shift+Space',
     ask: 'Control+Shift+Enter',

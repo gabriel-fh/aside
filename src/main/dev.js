@@ -159,4 +159,89 @@ async function contextTest({ extractFile, dir }) {
   }
 }
 
-module.exports = { localTest, mcpTest, contextTest };
+// ASIDE_QUOTA_TEST=1 (exige ASIDE_DATA_DIR): provedor falso em que o modelo principal esgota a cota do dia
+// no segundo pedido. Confere o medidor, a troca para o modelo reserva e o pedido de aquecimento.
+async function quotaTest({ settings, ask, startSession, stopSession, quotaView, tap }) {
+  const http = require('http');
+  const log = (...args) => console.log('[cota]', ...args);
+  if (!process.env.ASIDE_DATA_DIR) return log('FALHOU: defina ASIDE_DATA_DIR para nao mexer nas configuracoes reais.');
+
+  const seen = [];
+  let mainCalls = 0;
+  const fake = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      const { model, max_tokens: maxTokens } = JSON.parse(body);
+      seen.push(`${model}${maxTokens === 1 ? ' (aquecimento)' : ''}`);
+      if (model === 'principal' && ++mainCalls > 2) {
+        res.writeHead(429, { 'Content-Type': 'application/json', 'x-ratelimit-remaining-requests': '0' });
+        return res.end(
+          JSON.stringify({
+            error: {
+              message:
+                'Rate limit reached for model `principal` on tokens per day (TPD): Limit 200000, Used 199100, Requested 2400. Please try again in 16m51.2s.',
+            },
+          })
+        );
+      }
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'x-ratelimit-limit-requests': '1000',
+        'x-ratelimit-remaining-requests': String(1000 - seen.length),
+      });
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `resposta de ${model}` } }] })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], x_groq: { usage: { total_tokens: 30000 } } })}\n\n`
+      );
+      res.end('data: [DONE]\n\n');
+    });
+  });
+  await new Promise((r) => fake.listen(0, '127.0.0.1', r));
+
+  const events = [];
+  tap((channel, payload) => {
+    if (channel === 'status' || channel === 'answer:end') events.push(`${channel}: ${JSON.stringify(payload)}`);
+  });
+  const settle = () => new Promise((r) => setTimeout(r, 400));
+  const show = (label) => {
+    const q = quotaView();
+    log(`${label} | modelo ${q.model} | usados ${q.used} de ${q.limit} | restam ${q.left} | reserva em uso: ${q.onBackup} | pedidos restantes: ${q.reqLeft}`);
+  };
+
+  try {
+    settings.update({
+      chatProvider: 'custom',
+      customBase: `http://127.0.0.1:${fake.address().port}`,
+      customModel: 'principal',
+      customBackupModel: 'reserva',
+      dayTokenLimit: 200000,
+      transcribeProvider: 'openrouter',
+      economy: false,
+      hybridLocal: false,
+      localFallback: false,
+    });
+    show('inicio');
+    startSession();
+    await settle();
+    show('depois do aquecimento');
+    await ask({ text: 'primeira pergunta' });
+    show('depois da 1a pergunta');
+    await ask({ text: 'segunda pergunta, a cota acaba aqui' });
+    await settle();
+    show('depois da 2a pergunta');
+    await ask({ text: 'terceira pergunta, ja no reserva' });
+    await settle();
+    show('depois da 3a pergunta');
+    await stopSession();
+    log('pedidos recebidos:', seen.join(' > '));
+    for (const event of events) log(event);
+  } catch (error) {
+    log('FALHOU:', error.message);
+  } finally {
+    tap(null);
+    fake.close();
+  }
+}
+
+module.exports = { localTest, mcpTest, contextTest, quotaTest };

@@ -347,6 +347,28 @@
   document.getElementById('setupBtn').addEventListener('click', () => api.openSettings('geral'));
   el.hideBtn.addEventListener('click', () => api.hideOverlay());
 
+  // Medidor de cota: quanto resta do limite diario de tokens do modelo da nuvem em uso.
+  const thousands = (n) => (n >= 1000 ? `${Math.round(n / 1000)} mil` : String(n));
+  function applyQuota(state) {
+    const box = document.getElementById('quota');
+    box.hidden = !state || !state.show || !state.limit;
+    if (box.hidden) return;
+    const pct = state.spent ? 0 : Math.round((state.left / state.limit) * 100);
+    document.getElementById('quotaFill').style.width = `${pct}%`;
+    document.getElementById('quotaText').textContent = `${state.onBackup ? 'Cota do modelo reserva' : 'Cota do dia'}: ${pct}%`;
+    box.classList.toggle('low', pct <= 25 && pct > 10);
+    box.classList.toggle('out', pct <= 10);
+    const lines = [
+      `Modelo: ${state.model}${state.onBackup ? ' (reserva, o principal esgotou a cota)' : ''}`,
+      `Tokens em 24 horas: ${thousands(state.used)} usados de ${thousands(state.limit)}, restam ${thousands(state.left)}`,
+    ];
+    if (state.daily && state.reqLeft !== null) lines.push(`Pedidos restantes hoje: ${state.reqLeft}`);
+    lines.push('A conta considera só o que o Aside gastou.');
+    box.title = lines.join('\n');
+  }
+  api.on('quota', applyQuota);
+  api.getQuota().then(applyQuota);
+
   api.on('settings', applySettings);
   api.on('session', applySession);
   api.on('transcript', addLine);

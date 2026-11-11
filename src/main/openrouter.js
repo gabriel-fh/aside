@@ -25,6 +25,47 @@ async function readError(res) {
   return new Error(`O provedor respondeu ${res.status}: ${String(detail).slice(0, 300)}`);
 }
 
+// Quem acompanha cota e consumo registra um observador. Ele recebe { base, model, limits, tokens }.
+let observer = null;
+function observe(fn) {
+  observer = fn;
+}
+function report(info) {
+  if (!observer) return;
+  try {
+    observer(info);
+  } catch {
+    // o medidor nunca pode derrubar uma resposta
+  }
+}
+
+// Cabecalhos de limite que o servico devolve. No Groq, pedidos sao por dia e tokens sao por minuto.
+function readLimits(res) {
+  const num = (name) => {
+    const value = res.headers.get(name);
+    return value === null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
+  };
+  const out = {
+    reqLimit: num('x-ratelimit-limit-requests'),
+    reqLeft: num('x-ratelimit-remaining-requests'),
+    minuteLimit: num('x-ratelimit-limit-tokens'),
+    minuteLeft: num('x-ratelimit-remaining-tokens'),
+  };
+  return Object.values(out).some((v) => v !== null) ? out : null;
+}
+
+// Conta aproximada para servicos que nao informam o consumo no fim da resposta.
+function roughTokens(messages, text) {
+  let chars = String(text || '').length;
+  for (const m of messages || []) {
+    if (typeof m.content === 'string') chars += m.content.length;
+    else if (Array.isArray(m.content)) {
+      for (const part of m.content) if (part.type === 'text') chars += String(part.text || '').length;
+    }
+  }
+  return Math.ceil(chars / 3.5);
+}
+
 let modelsCache = null;
 
 async function listModels(force = false) {
@@ -106,13 +147,18 @@ async function streamTurn({ base = BASE, key, model, messages, tools, signal, on
     signal,
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw await readError(res);
+  const limits = readLimits(res);
+  if (!res.ok) {
+    report({ base, model, limits, tokens: 0 });
+    throw await readError(res);
+  }
 
   const decoder = new TextDecoder();
   const calls = [];
   let buffer = '';
   let text = '';
   let finishReason = '';
+  let usage = null;
   for await (const chunk of res.body) {
     buffer += decoder.decode(chunk, { stream: true });
     let nl;
@@ -129,6 +175,9 @@ async function streamTurn({ base = BASE, key, model, messages, tools, signal, on
         continue;
       }
       if (json.error) throw new Error(json.error.message || 'Erro do provedor');
+      // Consumo real: o Groq manda em x_groq.usage, outros servicos em usage.
+      if (json.usage) usage = json.usage;
+      if (json.x_groq && json.x_groq.usage) usage = json.x_groq.usage;
       const choice = json.choices && json.choices[0];
       if (choice && choice.finish_reason) finishReason = choice.finish_reason;
       const delta = choice && choice.delta;
@@ -148,6 +197,8 @@ async function streamTurn({ base = BASE, key, model, messages, tools, signal, on
     }
   }
   const toolCalls = calls.filter(Boolean).map((call, i) => ({ ...call, id: call.id || `call_${i}` }));
+  const counted = usage && Number(usage.total_tokens);
+  report({ base, model, limits, tokens: counted > 0 ? counted : roughTokens(messages, text) });
   return { text, toolCalls, finishReason };
 }
 
@@ -186,17 +237,29 @@ async function complete({ base, key, model, messages, signal, maxTokens }) {
   return streamChat({ base, key, model, messages, signal, maxTokens });
 }
 
-// Se o erro for limite por minuto (429) com prazo curto, devolve quantos segundos esperar. Senao, null.
-function rateLimitWait(error) {
+// Prazo, em segundos, que um erro 429 manda esperar ("try again in 1h2m3.5s", "in 960ms"). Sem prazo, null.
+function retryAfter(error) {
   const message = String((error && error.message) || '');
   if (!/\b429\b/.test(message)) return null;
-  const match = message.match(/try again in (?:(\d+)m)?([\d.]+)\s*s/i);
+  const match = message.match(/try again in ((?:[\d.]+\s*(?:ms|h|m|s)\s*)+)/i);
   if (!match) return null;
-  const seconds = Number(match[1] || 0) * 60 + Number(match[2]);
-  return Number.isFinite(seconds) && seconds <= 45 ? seconds : null;
+  const UNIT = { ms: 0.001, h: 3600, m: 60, s: 1 };
+  let seconds = 0;
+  for (const [, amount, unit] of match[1].matchAll(/([\d.]+)\s*(ms|h|m|s)/gi)) {
+    seconds += Number(amount) * UNIT[unit.toLowerCase()];
+  }
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
+// Se o erro for limite por minuto (429) com prazo curto, devolve quantos segundos esperar. Senao, null.
+function rateLimitWait(error) {
+  const seconds = retryAfter(error);
+  return seconds !== null && seconds <= 45 ? seconds : null;
 }
 
 module.exports = {
+  observe,
+  retryAfter,
   listModels,
   transcribe,
   streamTurn,

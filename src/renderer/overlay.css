@@ -88,6 +88,51 @@ body {
   }
 }
 
+/* Medidor de cota do servico de nuvem: a barra de fundo encolhe conforme a cota do dia acaba. */
+#quota {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  margin-right: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+#quota i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(76, 141, 255, 0.28);
+}
+
+#quota b {
+  position: relative;
+  font-weight: 600;
+}
+
+#quota.low {
+  border-color: rgba(255, 190, 80, 0.6);
+  color: #ffd699;
+}
+
+#quota.low i {
+  background: rgba(255, 190, 80, 0.3);
+}
+
+#quota.out {
+  border-color: rgba(255, 93, 93, 0.6);
+  color: #ffb4b4;
+}
+
+#quota.out i {
+  background: rgba(255, 93, 93, 0.3);
+}
+
 .meters {
   display: none;
   flex-direction: column;
@@ -173,7 +218,7 @@ body {
 }
 
 #assistant {
-  max-width: 150px;
+  max-width: 132px;
   padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid transparent;

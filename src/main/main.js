@@ -15,9 +15,13 @@ const {
 const fs = require('fs');
 const path = require('path');
 
+// Uso em desenvolvimento: pasta de dados separada, para testar sem tocar nas configuracoes reais.
+if (process.env.ASIDE_DATA_DIR) app.setPath('userData', path.resolve(process.env.ASIDE_DATA_DIR));
+
 const settings = require('./settings');
 const db = require('./db');
 const openrouter = require('./openrouter');
+const quota = require('./quota');
 const local = require('./local');
 const mcp = require('./mcp');
 const { extractFile } = require('./context');
@@ -53,7 +57,11 @@ let currentAsk = null;
 let askSeq = 0;
 let autoTimer = null;
 
+// Uso em desenvolvimento: um teste pode escutar tudo o que vai para as janelas.
+let devTap = null;
+
 function broadcast(channel, payload) {
+  if (devTap) devTap(channel, payload);
   for (const win of [overlay, settingsWin]) {
     if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
   }
@@ -97,12 +105,71 @@ async function chatTarget(route = 'strong') {
   if (s.chatProvider === 'custom') {
     const base = customBase();
     if (!base || !s.customModel) throw new Error('Preencha o endereço e o modelo do outro serviço em Ajustes.');
+    // Com a cota do dia do modelo principal esgotada, o modelo reserva assume ate o prazo passar.
+    const backup = backupTarget(s);
+    if (backup && isPaused(s.customModel)) return backup;
     return { base, key: settings.getCustomKey(), model: s.customModel, local: false };
   }
   const key = settings.getApiKey();
   if (!key) throw new Error(NO_KEY);
   return { key, model: s.chatModel, local: false };
 }
+
+/* ---------- cota da nuvem e modelo reserva ---------- */
+
+// Modelos da nuvem com a cota esgotada: modelo -> ate quando ficar fora.
+const paused = new Map();
+const isPaused = (model) => (paused.get(model) || 0) > Date.now();
+
+// Segundo modelo do mesmo servico, com cota propria. So existe no "outro servico" e se foi preenchido.
+function backupTarget(s = settings.load()) {
+  const model = String(s.customBackupModel || '').trim();
+  const base = customBase();
+  if (s.chatProvider !== 'custom' || !base || !model || model === s.customModel) return null;
+  return { base, key: settings.getCustomKey(), model, local: false };
+}
+
+// Erro 429 com prazo longo (ou sem prazo) e cota esgotada: tira o modelo de uso ate o prazo passar.
+// Limite por minuto, com prazo curto, nao conta: nesse caso basta esperar.
+function pauseIfSpent(target, error) {
+  if (target.local || !/\b429\b/.test(error.message)) return false;
+  const wait = openrouter.retryAfter(error);
+  if (wait !== null && wait <= 45) return false;
+  paused.set(target.model, Date.now() + (wait === null ? 600 : wait) * 1000);
+  quota.learn(target.model, error.message);
+  pushQuota();
+  return true;
+}
+
+// Retrato da cota do modelo da nuvem que esta valendo agora.
+function quotaView() {
+  const s = settings.load();
+  if (s.chatProvider !== 'custom' || !s.customModel) return { show: false };
+  const backup = backupTarget(s);
+  const onBackup = Boolean(backup) && isPaused(s.customModel);
+  const model = onBackup ? backup.model : s.customModel;
+  return {
+    show: true,
+    ...quota.view(model, Number(s.dayTokenLimit) || 0),
+    onBackup,
+    spent: isPaused(model),
+    // No Groq os pedidos restantes informados sao os do dia. Em outros servicos o sentido varia.
+    daily: /groq\.com/i.test(customBase()),
+  };
+}
+
+let quotaTimer = null;
+function pushQuota() {
+  clearTimeout(quotaTimer);
+  quotaTimer = setTimeout(() => broadcast('quota', quotaView()), 150);
+}
+
+openrouter.observe((info) => {
+  // O servidor deste computador nao tem cota.
+  if (info.model === 'local') return;
+  quota.note(info);
+  pushQuota();
+});
 
 // O servidor local roda sem leitor de imagem: manda so o texto.
 function textOnly(messages) {
@@ -303,6 +370,7 @@ function changeSettings(patch) {
   ensureBrief();
   buildTray();
   broadcast('settings', next);
+  pushQuota();
   return next;
 }
 
@@ -544,7 +612,7 @@ async function ask({
     const wantsCode = looksLikeCode(typed) || (answerNow && lastThem && looksLikeCode(lastThem.text));
     const heavy = withScreen || inTask || wantsCode || (cont && lastAnswer.route === 'strong');
     const route = heavy ? 'strong' : 'fast';
-    const target = await chatTarget(route);
+    let target = await chatTarget(route);
     const showEngine = (t) => hybridOn() && broadcast('answer:meta', { id, engine: t.local ? 'local' : 'cloud' });
     showEngine(target);
     let streamed = false;
@@ -606,6 +674,15 @@ async function ask({
         return await run(useImage);
       } catch (error) {
         if (streamed || controller.signal.aborted) throw error;
+        // Cota do dia esgotada: o modelo reserva do mesmo servico assume, nesta pergunta e nas seguintes.
+        if (pauseIfSpent(target, error)) {
+          const backup = backupTarget();
+          if (backup && backup.model !== target.model && !isPaused(backup.model)) {
+            status('info', `Cota de ${target.model} esgotada. Usando o modelo reserva ${backup.model}.`);
+            target = backup;
+            return attempt(useImage && (await seesImages(target)));
+          }
+        }
         // Limite da nuvem numa pergunta falada: o modelo deste computador assume na hora.
         // Em codigo, tela e desafio vale mais esperar a nuvem: os modelos locais pequenos erram demais nisso.
         if (/\b429\b/.test(error.message) && hybridOn() && !target.local && !heavy) {
@@ -750,11 +827,45 @@ function startSession() {
   if (s.transcribeProvider === 'local') {
     local.ensure('whisper').catch((error) => status('error', error.message));
   }
-  // O modelo de respostas local tambem sobe antes, para a primeira resposta nao esperar a carga.
-  if (s.chatProvider === 'local' || hybridOn(s)) {
-    local.ensure('llama').catch((error) => status('error', error.message));
-  }
+  warmUp(s);
   return sessionState();
+}
+
+// Aquece quem vai responder, para a primeira pergunta de verdade nao ser a mais lenta.
+function warmUp(s) {
+  // Nuvem: um pedido minimo confere chave e modelo e ja traz a cota do dia para o medidor.
+  if (s.chatProvider !== 'local') {
+    (async () => {
+      const target = await chatTarget();
+      try {
+        await openrouter.complete({ ...target, messages: [{ role: 'user', content: 'ok' }], maxTokens: 1 });
+      } catch (error) {
+        const backup = pauseIfSpent(target, error) && backupTarget();
+        if (backup) status('info', `Cota de ${target.model} esgotada. Usando o modelo reserva ${backup.model}.`);
+        else throw error;
+      }
+    })().catch((error) => status('error', `Teste do serviço de respostas falhou. ${error.message}`.slice(0, 260)));
+  }
+  // Este computador: sobe o servidor e roda uma resposta de um token com o roteiro real do modo.
+  // A primeira execucao de um modelo custa varios segundos, e assim ela acontece antes da conversa.
+  if (s.chatProvider === 'local' || hybridOn(s)) {
+    (async () => {
+      await local.ensure('llama');
+      const view = settings.publicView();
+      const assistant = view.assistants.find((a) => a.id === view.activeAssistantId) || view.assistants[0];
+      const compact = Boolean(view.economy);
+      const messages = buildChatMessages({
+        assistant,
+        responseLanguage: view.responseLanguage,
+        lines: [],
+        turns: [],
+        request: REQUESTS.answerNow,
+        contextLimit: compact ? 9000 : 12000,
+        compact,
+      });
+      await openrouter.complete({ ...(await localTarget()), messages: textOnly(messages), maxTokens: 1 });
+    })().catch((error) => status('error', error.message));
+  }
 }
 
 async function stopSession() {
@@ -946,6 +1057,7 @@ function registerIpc() {
     return undefined;
   });
   ipcMain.handle('task:get', () => taskState());
+  ipcMain.handle('quota:get', () => quotaView());
   ipcMain.handle('task:clear', () => clearTask());
   ipcMain.handle('ask:cancel', () => {
     if (currentAsk) currentAsk.abort();
@@ -1134,6 +1246,19 @@ if (!app.requestSingleInstanceLock()) {
     } else if (process.env.ASIDE_MCP_TEST) {
       require('./dev')
         .mcpTest({ mcp, openrouter })
+        .finally(() => app.quit());
+    } else if (process.env.ASIDE_QUOTA_TEST) {
+      require('./dev')
+        .quotaTest({
+          settings,
+          ask,
+          startSession,
+          stopSession,
+          quotaView,
+          tap: (fn) => {
+            devTap = fn;
+          },
+        })
         .finally(() => app.quit());
     } else if (process.env.ASIDE_LOCAL_TEST) {
       require('./dev')

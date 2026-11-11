@@ -173,6 +173,16 @@
               </div>
               <datalist id="customModels"></datalist>
             </label>
+            <label class="field">
+              <span>Modelo reserva (opcional)</span>
+              <input id="customBackupModel" list="customModels" spellcheck="false" placeholder="Exemplo: openai/gpt-oss-20b" />
+              <small>Quando a cota do dia do modelo principal acabar, este assume sozinho.</small>
+            </label>
+            <label class="field">
+              <span>Limite diário de tokens</span>
+              <input id="dayTokenLimit" inputmode="numeric" spellcheck="false" />
+              <small>Alimenta o medidor "Cota do dia" do painel de respostas. No Groq grátis são 200000. Zero esconde o medidor.</small>
+            </label>
             <label class="check">
               <input id="useCustom" type="checkbox" />
               <span><b>Usar este serviço para responder</b><small>Desligado, as respostas voltam para o OpenRouter.</small></span>
