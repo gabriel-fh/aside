@@ -81,3 +81,11 @@ Conecta ao servidor de exemplo em `dev/mcp-test-server.js` e roda o laço de fer
 - Login por navegador (OAuth) em servidores MCP remotos.
 - Ferramentas MCP com o modelo local.
 - Instalador.
+
+## Gerar o executável
+
+```
+npm run dist
+```
+
+Saem dois arquivos em `dist/`: o instalador (`Aside-<versão>-instalador.exe`) e a versão portátil, que roda sem instalar (`Aside-<versão>-portatil.exe`). Os executáveis não são assinados, então o Windows pode mostrar o aviso do SmartScreen na primeira abertura.

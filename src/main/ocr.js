@@ -5,7 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 
-const SCRIPT = path.join(__dirname, 'ocr.ps1');
+// No app empacotado o script fica fora do pacote compactado, senao o PowerShell nao consegue abrir.
+const SCRIPT = path.join(__dirname, 'ocr.ps1').replace('app.asar', 'app.asar.unpacked');
 const MAX_CHARS = 12000;
 
 function readScreenText(pngBuffer) {

@@ -5,13 +5,45 @@
   "main": "src/main/main.js",
   "private": true,
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win"
   },
   "devDependencies": {
-    "electron": "^45.2.3"
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "pdfjs-dist": "^6.5.438"
+  },
+  "author": "Aside",
+  "build": {
+    "appId": "app.aside.desktop",
+    "productName": "Aside",
+    "publish": null,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "asarUnpack": [
+      "src/main/ocr.ps1"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/logo.png"
+    },
+    "nsis": {
+      "artifactName": "Aside-${version}-instalador.exe",
+      "shortcutName": "Aside"
+    },
+    "portable": {
+      "artifactName": "Aside-${version}-portatil.exe"
+    }
   }
 }
