@@ -28,6 +28,10 @@
       </button>
 
       <div class="nav-label">Configurar</div>
+      <button data-tab="guia" class="tab" title="Configuração guiada">
+        <svg class="ic" viewBox="0 0 16 16"><path d="M3 8.4l3.2 3.2L13 4.8" /></svg>
+        <span>Configuração guiada</span>
+      </button>
       <button data-tab="geral" class="tab" title="Ajustes">
         <svg class="ic" viewBox="0 0 16 16"><path d="M2 4.5h6.5M12 4.5h2M2 11.5h2M7.5 11.5H14" /><circle cx="10.2" cy="4.5" r="1.7" /><circle cx="5.8" cy="11.5" r="1.7" /></svg>
         <span>Ajustes</span>
@@ -93,11 +97,77 @@
         </div>
       </section>
 
+      <!-- ============ CONFIGURACAO GUIADA ============ -->
+      <section id="tab-guia" class="page" hidden>
+        <div class="wrap narrow">
+          <h1>Configuração guiada</h1>
+          <p class="lead">
+            Dois passos e o Aside está pronto. Cada passo já traz a opção recomendada para este computador. Você não
+            precisa abrir as outras telas de configuração.
+          </p>
+
+          <div class="group guide" id="gBox1">
+            <h2><span class="num" id="gMark1">1</span>Transcrever as falas</h2>
+            <p class="hint tight" id="gTransText"></p>
+            <div class="row wrap-row">
+              <button id="gTransBtn" class="pill">Instalar o recomendado</button>
+              <span id="gTransState" class="hint"></span>
+            </div>
+          </div>
+
+          <div class="group guide" id="gBox2">
+            <h2><span class="num" id="gMark2">2</span>Responder às perguntas</h2>
+            <p class="hint tight">
+              <b>Recomendado: Groq.</b> É gratuito, responde rápido e a cota diária cobre uma entrevista de uma hora. O
+              Aside já escolhe o modelo, o modelo reserva e o limite de cota.
+            </p>
+            <ol class="steps">
+              <li>
+                Abra o site do Groq, entre com a sua conta e crie uma chave de API.
+                <button id="gOpenGroq" class="link">Abrir o site do Groq</button>
+              </li>
+              <li>Copie a chave, cole no campo abaixo e clique em Salvar e testar.</li>
+            </ol>
+            <div class="row wrap-row">
+              <input id="gKey" type="password" placeholder="Cole aqui a chave do Groq (começa com gsk_)" autocomplete="off" spellcheck="false" />
+              <button id="gSaveKey" class="pill" type="button">Salvar e testar</button>
+            </div>
+            <p class="hint" id="gCloudState"></p>
+            <p class="hint">
+              Já usa o OpenRouter ou outro serviço? <button class="link" data-goto="geral">Configurar em Ajustes</button>.
+            </p>
+          </div>
+
+          <div class="group guide" id="gBox3">
+            <h2><span class="num" id="gMark3">3</span>Usar</h2>
+            <p class="hint tight" id="gDoneText"></p>
+            <div class="row wrap-row">
+              <button id="gStart" class="pill">Iniciar sessão</button>
+              <button class="ghost" data-goto="assistentes">Cadastrar vaga e currículo</button>
+              <button class="ghost" data-goto="inicio">Ir para o Início</button>
+            </div>
+          </div>
+
+          <div class="group">
+            <h2>O que você pode ignorar</h2>
+            <ul class="plain">
+              <li><b>Respostas no computador</b> (tela Usar offline): opcional. Baixa de 2 a 5 GB e responde pior que o Groq. Só vale para quem quer trabalhar sem internet.</li>
+              <li><b>Chave do OpenRouter</b> (tela Ajustes): desnecessária com o Groq e a transcrição neste computador.</li>
+              <li><b>Ferramentas</b>: recurso avançado, não é preciso para reunião nem entrevista.</li>
+              <li><b>Modo stealth</b>: já vem ligado. As janelas do Aside não aparecem em compartilhamento de tela.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <!-- ============ AJUSTES ============ -->
       <section id="tab-geral" class="page" hidden>
         <div class="wrap narrow">
           <h1>Ajustes</h1>
-          <p class="lead">O essencial para o Aside funcionar. O que é opcional fica recolhido.</p>
+          <p class="lead">
+            Primeira vez? Use a <button class="link" data-goto="guia">Configuração guiada</button>: ela faz o necessário
+            em dois passos. Esta tela reúne todas as opções.
+          </p>
 
           <div class="group">
             <h2>Conexão com a inteligência artificial</h2>
@@ -262,9 +332,13 @@
         <div class="wrap narrow">
           <h1>Usar offline</h1>
           <p class="lead">
-            Faz tudo neste computador, sem chave e sem custo por uso. É mais lento e menos preciso que a nuvem. Em cada
-            bloco: instale o motor, baixe um modelo e ligue a opção.
+            Faz tudo neste computador, sem chave e sem custo por uso. Em cada bloco: instale o motor, baixe um modelo e
+            ligue a opção. As opções marcadas com "Recomendado" são as indicadas para este computador.
           </p>
+          <div class="tip">
+            <b>Sugestão:</b> transcrição neste computador (recomendado, grátis e sem limite) e respostas pela nuvem. A
+            <button class="link" data-goto="guia">Configuração guiada</button> faz isso sozinha.
+          </div>
 
           <div class="group">
             <h2>Transcrição no computador</h2>
@@ -284,7 +358,11 @@
           </div>
 
           <div class="group">
-            <h2>Respostas no computador</h2>
+            <h2>Respostas no computador (opcional)</h2>
+            <p class="hint tight">
+              Sugestão: deixe as respostas na nuvem. Modelos que cabem num notebook respondem pior e erram em código. Se
+              quiser uma rede de segurança, instale o motor e o modelo recomendados abaixo e ligue só a "Reserva".
+            </p>
             <label class="field">
               <span>Quem responde</span>
               <select id="chatProvider">

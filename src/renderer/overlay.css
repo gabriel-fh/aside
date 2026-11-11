@@ -302,6 +302,11 @@ body {
   color: var(--text);
 }
 
+#saveMd {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
 #ctxBadge {
   padding: 3px 9px;
   border-radius: 999px;

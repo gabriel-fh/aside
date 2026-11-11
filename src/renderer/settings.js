@@ -38,7 +38,7 @@
       loadRecent();
     }
     if (name === 'historico') loadHistory();
-    if (name === 'local') refreshLocal();
+    if (name === 'local' || name === 'guia') refreshLocal();
     if (name === 'ferramentas') refreshMcp();
   }
   for (const button of document.querySelectorAll('.tab')) {
@@ -56,6 +56,7 @@
 
   const MODE_INFO = {
     reuniao: 'Chamadas e reuniões: acompanha decisões, pendências e perguntas feitas a você.',
+    ouvinte: 'Só registra a reunião. Ao encerrar, salva a ata e a transcrição em Markdown.',
     entrevista: 'Entrevistas: respostas apoiadas no seu currículo e na vaga.',
     estudo: 'Aulas e problemas: explicações passo a passo e código.',
     geral: 'Qualquer conversa, sem foco específico.',
@@ -121,9 +122,9 @@
             : other
               ? 'Respostas por outro serviço de IA.'
               : 'Tudo configurado.'
-          : 'Cole uma chave do OpenRouter (leva 2 minutos) ou configure o uso offline.',
-        ready ? 'Alterar' : 'Conectar',
-        () => showTab('geral')
+          : 'A configuração guiada resolve em dois passos, com as opções recomendadas para este computador.',
+        ready ? 'Alterar' : 'Configurar',
+        () => showTab(ready ? 'geral' : 'guia')
       ),
       stepRow(
         hasContext,
@@ -229,9 +230,8 @@
 
   $('homeStart').addEventListener('click', () => {
     if (!sessionActive && !settings.ready) {
-      toast('Antes, conecte uma inteligência artificial.', true);
-      showTab('geral');
-      $('apiKey').focus();
+      toast('Antes, faça a configuração guiada.', true);
+      showTab('guia');
       return;
     }
     api.toggleSession();
@@ -413,7 +413,7 @@
     return node;
   }
 
-  function lrow(title, note, parts) {
+  function lrow(title, note, parts, recommended) {
     const row = document.createElement('div');
     row.className = 'lrow';
     const name = document.createElement('span');
@@ -423,6 +423,12 @@
       const small = document.createElement('small');
       small.textContent = note;
       name.append(small);
+    }
+    if (recommended) {
+      const tag = document.createElement('em');
+      tag.className = 'rec';
+      tag.textContent = 'Recomendado';
+      name.append(tag);
     }
     row.append(name);
     for (const part of parts) {
@@ -461,7 +467,7 @@
             toast(`${v.label} instalado.`);
           }),
         ];
-        return lrow(v.label, v.version ? `build ${v.version}` : '', parts);
+        return lrow(v.label, v.version ? `build ${v.version}` : '', parts, setup && setup[`${kind}Variant`] === v.id);
       })
     );
   }
@@ -484,7 +490,7 @@
                 await api.setSettings({ whisperModel: m.id });
               }),
         ];
-        return lrow(m.id, `${m.mb} MB, ${m.note}`, parts);
+        return lrow(m.id, `${m.mb} MB, ${m.note}`, parts, setup && setup.whisperModel === m.id);
       })
     );
 
@@ -497,7 +503,7 @@
           await api.localDelete('llama', m.name);
           if (inUse) await api.setSettings({ llamaModel: '' });
         }, true),
-      ]);
+      ], setup && setup.llamaFile === m.name);
     });
     if (settings.llamaModel && !installed.some((m) => m.path === settings.llamaModel)) {
       rows.push(lrow(settings.llamaModel, 'arquivo externo', ['Em uso']));
@@ -512,7 +518,8 @@
           lrow(
             m.name,
             `${(m.mb / 1000).toFixed(1)} GB, ${m.note}`,
-            progressParts(`llm:${m.file}`) || [button('Baixar', () => api.localLlmModel(m.url))]
+            progressParts(`llm:${m.file}`) || [button('Baixar', () => api.localLlmModel(m.url))],
+            setup && setup.llamaFile === m.file
           )
         )
     );
@@ -523,8 +530,124 @@
     if (state) {
       localState = state;
       renderLocal();
+      renderGuide();
     }
   }
+
+  /* ---------- configuracao guiada ---------- */
+
+  // O que recomendar neste computador (motor e modelo de transcricao, modelo local).
+  let setup = null;
+  let guideBusy = false;
+  let cloudTested = '';
+
+  function markStep(n, done) {
+    $(`gBox${n}`).classList.toggle('done', done);
+    $(`gMark${n}`).textContent = done ? '✓' : String(n);
+  }
+
+  function renderGuide() {
+    if (!settings || !localState || !setup) return;
+    const variant = localState.whisper.variants.find((v) => v.id === setup.whisperVariant);
+    const model = localState.whisper.models.find((m) => m.id === setup.whisperModel);
+    const anyEngine = localState.whisper.variants.some((v) => v.selected && v.installed);
+    const anyModel = localState.whisper.models.some((m) => m.id === settings.whisperModel && m.installed);
+    const localDone = settings.transcribeProvider === 'local' && anyEngine && anyModel;
+    const cloudTranscribe = settings.transcribeProvider !== 'local' && settings.hasKey;
+    const transDone = localDone || cloudTranscribe;
+    markStep(1, transDone);
+    const where = setup.nvidia ? 'pela placa de vídeo NVIDIA' : 'pelo processador';
+    $('gTransText').textContent = transDone
+      ? localDone
+        ? `Pronto. As falas são transcritas neste computador, com o modelo ${settings.whisperModel}. Grátis e sem limite.`
+        : 'Pronto. As falas são transcritas pela nuvem, com a sua chave do OpenRouter.'
+      : `Recomendado: transcrever neste computador, ${where}, com o modelo ${setup.whisperModel}. É grátis, sem limite e o áudio não sai da máquina. O Aside baixa ${setup.nvidia ? 'cerca de 2 GB' : 'cerca de 200 MB'} uma única vez.`;
+    const downloads = Object.entries(localState.downloads || {}).filter(([id]) => id.startsWith('bin:whisper') || id.startsWith('whisper:'));
+    $('gTransBtn').hidden = transDone && !guideBusy;
+    $('gTransBtn').disabled = guideBusy;
+    $('gTransBtn').textContent = guideBusy ? 'Instalando...' : 'Instalar o recomendado';
+    $('gTransState').textContent = downloads.length
+      ? downloads
+          .map(([id, d]) => `${id.startsWith('bin:') ? 'Motor' : 'Modelo'}: ${d.total ? `${Math.floor((d.received / d.total) * 100)}%` : `${Math.round(d.received / 1e6)} MB`}`)
+          .join(', ')
+      : guideBusy
+        ? 'Preparando...'
+        : !transDone && variant && variant.installed && model && model.installed
+          ? 'Já está tudo baixado: falta só ativar.'
+          : '';
+
+    const groq = settings.chatProvider === 'custom' && settings.hasCustomKey && Boolean(settings.customModel);
+    const cloudDone =
+      groq || (settings.chatProvider === 'openrouter' && settings.hasKey) || (settings.chatProvider === 'local' && Boolean(settings.llamaModel));
+    markStep(2, cloudDone);
+    if (!cloudTested) {
+      $('gCloudState').textContent = cloudDone
+        ? groq
+          ? `Pronto. Respostas por ${settings.customModel}${settings.customBackupModel ? `, com ${settings.customBackupModel} de reserva` : ''}. Para trocar a chave, cole a nova e clique em Salvar e testar.`
+          : settings.chatProvider === 'local'
+            ? 'Pronto. As respostas saem deste computador.'
+            : 'Pronto. As respostas saem pelo OpenRouter.'
+        : '';
+    }
+
+    const ready = Boolean(settings.ready);
+    markStep(3, ready && recentCount > 0);
+    $('gStart').disabled = !ready;
+    $('gDoneText').textContent = ready
+      ? 'Tudo certo. Clique em Iniciar sessão: uma barra pequena fica por cima das outras janelas. Para entrevistas, cadastre antes a vaga e o currículo. Para só registrar uma reunião e receber a ata em Markdown, escolha o modo Ouvinte de reunião na barra.'
+      : 'Conclua os passos 1 e 2 para liberar o Aside.';
+  }
+
+  // Um clique: instala o motor recomendado, baixa o modelo recomendado e ativa a transcricao local.
+  $('gTransBtn').addEventListener('click', async () => {
+    if (guideBusy || !setup) return;
+    guideBusy = true;
+    renderGuide();
+    await guard(async () => {
+      const state = await api.localStatus();
+      const variant = state.whisper.variants.find((v) => v.id === setup.whisperVariant);
+      if (!variant.installed) await api.localInstall('whisper', setup.whisperVariant);
+      const model = state.whisper.models.find((m) => m.id === setup.whisperModel);
+      if (!model.installed) await api.localWhisperModel(setup.whisperModel);
+      await api.setSettings({
+        whisperVariant: setup.whisperVariant,
+        whisperModel: setup.whisperModel,
+        transcribeProvider: 'local',
+      });
+      toast('Transcrição pronta.');
+    });
+    guideBusy = false;
+    refreshLocal();
+  });
+
+  $('gOpenGroq').addEventListener('click', () => api.openGroqKeys());
+  $('gSaveKey').addEventListener('click', async () => {
+    const key = $('gKey').value.trim();
+    if (!key && !settings.hasCustomKey) return toast('Cole a chave antes de salvar.', true);
+    $('gSaveKey').disabled = true;
+    cloudTested = 'testing';
+    $('gCloudState').textContent = 'Testando a chave...';
+    try {
+      const result = await api.setupCloud(key);
+      $('gKey').value = '';
+      cloudTested = 'ok';
+      $('gCloudState').textContent = `Funcionou. O Groq respondeu com o modelo ${result.model}.`;
+      loadKeys();
+    } catch (error) {
+      cloudTested = 'error';
+      const message = String(error.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+      $('gCloudState').textContent = /\b401\b/.test(message)
+        ? 'O Groq recusou a chave. Confira se copiou a chave inteira e tente de novo.'
+        : `Não funcionou. ${message}`;
+    }
+    $('gSaveKey').disabled = false;
+  });
+  $('gStart').addEventListener('click', () => api.toggleSession());
+  api.setupInfo().then((info) => {
+    setup = info;
+    renderLocal();
+    renderGuide();
+  });
 
   $('ggufDownload').addEventListener('click', () =>
     guard(async () => {
@@ -543,6 +666,7 @@
   api.on('local', (state) => {
     localState = state;
     renderLocal();
+    renderGuide();
   });
 
   /* ---------- ferramentas (MCP) ---------- */
@@ -1056,6 +1180,7 @@
     renderShortcuts();
     renderLocal();
     renderHome();
+    renderGuide();
   }
 
   api.on('settings', apply);

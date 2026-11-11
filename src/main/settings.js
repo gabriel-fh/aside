@@ -12,7 +12,7 @@ const DEFAULTS = {
   language: 'português do Brasil',
   responseLanguage: 'português do Brasil',
   translateTo: '',
-  stealth: false,
+  stealth: true,
   autoInsights: true,
   autoSummary: true,
   economy: true,
@@ -78,6 +78,14 @@ function load() {
   if (cache.seed < 3) {
     cache.assistants = cache.assistants.map((a) => (a.id === 'entrevista' ? { ...a, interview: true } : a));
     cache.seed = 3;
+  }
+  // Versao 0.2: o modo ouvinte entra na lista e o stealth passa a vir ligado.
+  if (cache.seed < 4) {
+    if (!cache.assistants.some((a) => a.id === 'ouvinte')) {
+      cache.assistants = [...cache.assistants, DEFAULT_ASSISTANTS.find((a) => a.id === 'ouvinte')];
+    }
+    cache.stealth = true;
+    cache.seed = 4;
   }
   return cache;
 }

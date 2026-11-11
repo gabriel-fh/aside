@@ -31,7 +31,9 @@ const {
   activeJob,
   buildBriefMessages,
   buildChatMessages,
+  buildNotesMessages,
   buildSummaryMessages,
+  formatTranscript,
   briefSlot,
   contextKey,
   needsBrief,
@@ -49,7 +51,7 @@ let settingsWin = null;
 let tray = null;
 
 // Estado da sessao ao vivo. `lines` e `turns` alimentam o contexto do modelo.
-const live = { id: null, startedAt: null, lines: [], turns: [] };
+const live = { id: null, startedAt: null, lines: [], turns: [], assistant: null };
 let lastReady = null;
 // Transcricoes em andamento: "Responder" espera por elas para nao perder o fim da pergunta.
 const pendingSegments = new Set();
@@ -262,7 +264,9 @@ function openSettings(tab) {
     icon: LOGO,
     webPreferences: { preload: PRELOAD, contextIsolation: true },
   });
-  settingsWin.loadFile(path.join(ROOT, 'src', 'renderer', 'settings.html'), tab ? { hash: tab } : undefined);
+  // Sem IA configurada, a janela ja abre na configuracao guiada.
+  const first = tab || (aiReady() ? '' : 'guia');
+  settingsWin.loadFile(path.join(ROOT, 'src', 'renderer', 'settings.html'), first ? { hash: first } : undefined);
   settingsWin.on('closed', () => {
     settingsWin = null;
   });
@@ -783,6 +787,9 @@ async function ensureBrief() {
 function maybeAutoInsight(line) {
   const s = settings.load();
   if (!s.autoInsights || line.speaker !== 'them' || !line.text.includes('?')) return;
+  // O modo ouvinte so registra: nao sugere respostas.
+  const mode = s.assistants.find((a) => a.id === s.activeAssistantId);
+  if (mode && mode.listener) return;
   clearTimeout(autoTimer);
   autoTimer = setTimeout(() => {
     if (!live.id || currentAsk) return;
@@ -819,6 +826,7 @@ function startSession() {
   if (live.id) return sessionState();
   const s = settings.load();
   live.id = db.createSession({ assistant: s.activeAssistantId, model: s.chatModel });
+  live.assistant = s.activeAssistantId;
   live.startedAt = Date.now();
   live.lines = [];
   live.turns = [];
@@ -871,26 +879,93 @@ function warmUp(s) {
 async function stopSession() {
   if (!live.id) return sessionState();
   const id = live.id;
-  const lines = live.lines.slice();
   const turns = live.turns.slice();
+  const s = settings.load();
+  const mode = s.assistants.find((a) => a.id === live.assistant);
+  const listener = Boolean(mode && mode.listener);
   db.endSession(id);
   live.id = null;
   live.startedAt = null;
   clearTimeout(autoTimer);
   broadcast('session', sessionState());
-  if (settings.load().autoSummary && lines.length >= 4) {
-    summarize(id, lines, turns).catch((error) => status('error', `Resumo falhou: ${error.message}`));
-  }
+  // Falas ainda em transcricao entram na ata: espera por elas, com teto.
+  const tail = pendingSegments.size
+    ? Promise.race([Promise.allSettled([...pendingSegments]), new Promise((r) => setTimeout(r, 15000))])
+    : Promise.resolve();
+  tail
+    .then(async () => {
+      // A memoria guarda so as ultimas falas. O banco tem a conversa inteira.
+      const { lines } = sessionFromDb(id);
+      if ((s.autoSummary || listener) && lines.length >= 4) {
+        if (listener) status('info', 'Reunião encerrada. Gerando a ata...');
+        await summarize(id, lines, turns, listener).catch((error) => status('error', `Resumo falhou: ${error.message}`));
+      }
+      // O modo ouvinte entrega a ata em arquivo, sem pedir nada.
+      if (listener && lines.length) {
+        const file = saveSessionFile(id);
+        status('info', `Ata salva em ${file}`);
+        if (!SHOT_DIR && !process.env.ASIDE_NOTES_TEST) shell.showItemInFolder(file);
+      }
+    })
+    .catch((error) => status('error', error.message));
   return sessionState();
 }
 
-async function summarize(id, lines, turns) {
+// Pedido sem streaming que respeita os limites da nuvem: espera o limite por minuto e usa o modelo reserva.
+async function patientComplete(messages, maxTokens) {
+  for (let tries = 0; ; tries++) {
+    const target = await chatTarget();
+    try {
+      return await openrouter.complete({ ...target, messages: target.local ? textOnly(messages) : messages, maxTokens });
+    } catch (error) {
+      if (tries >= 4) throw error;
+      if (pauseIfSpent(target, error) && backupTarget()) continue;
+      const wait = openrouter.rateLimitWait(error);
+      if (wait === null) throw error;
+      await new Promise((r) => setTimeout(r, wait * 1000 + 500));
+    }
+  }
+}
+
+// Divide a transcricao em trechos que cabem num pedido.
+function chunkLines(lines, maxChars) {
+  const chunks = [];
+  let current = [];
+  let size = 0;
+  for (const line of lines) {
+    const length = line.text.length + 8;
+    if (size + length > maxChars && current.length) {
+      chunks.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(line);
+    size += length;
+  }
+  if (current.length) chunks.push(current);
+  return chunks;
+}
+
+async function summarize(id, lines, turns, minutes = false) {
   const s = settings.load();
-  const target = await chatTarget();
-  const text = await openrouter.complete({
-    ...target,
-    messages: buildSummaryMessages({ lines, turns, responseLanguage: s.responseLanguage }),
-  });
+  // Servicos gratuitos limitam os tokens por minuto: conversa longa e resumida por trechos e depois consolidada.
+  const perRequest = s.economy || s.chatProvider === 'local' ? 12000 : 200000;
+  const chunks = chunkLines(lines, perRequest);
+  let notes = '';
+  if (chunks.length > 1) {
+    const parts = [];
+    for (const [i, chunk] of chunks.entries()) {
+      status('info', `Resumindo a conversa: trecho ${i + 1} de ${chunks.length}.`);
+      const text = await patientComplete(buildNotesMessages(formatTranscript(chunk, chunk.length), s.responseLanguage), 500);
+      parts.push(`Trecho ${i + 1}:\n${text.trim()}`);
+    }
+    // As anotacoes tambem precisam caber num pedido.
+    notes = parts.join('\n\n').slice(0, perRequest);
+  }
+  const text = await patientComplete(
+    buildSummaryMessages({ lines, turns: notes ? [] : turns, responseLanguage: s.responseLanguage, notes, minutes }),
+    s.economy ? 1400 : undefined
+  );
   const [first, ...rest] = text.trim().split('\n');
   const title = first.replace(/^#+\s*/, '').trim().slice(0, 120) || 'Sessão';
   db.setSummary(id, title, rest.join('\n').trim());
@@ -954,12 +1029,18 @@ async function handleSegment({ speaker, wavBase64, ts }) {
 function sessionMarkdown(data) {
   const { session: sess, entries } = data;
   const date = new Date(sess.started_at);
-  const out = [`# ${sess.title || 'Sessão'}`, '', `Data: ${date.toLocaleString('pt-BR')}`, ''];
-  if (sess.summary) out.push('## Resumo', '', sess.summary, '');
+  const mode = settings.load().assistants.find((a) => a.id === sess.assistant);
+  const out = [`# ${sess.title || 'Sessão'}`, '', `- Data: ${date.toLocaleString('pt-BR')}`];
+  if (sess.ended_at) out.push(`- Duração: ${Math.max(1, Math.round((sess.ended_at - sess.started_at) / 60000))} min`);
+  if (mode) out.push(`- Modo: ${mode.name}`);
+  out.push('');
+  // A ata ja vem com as proprias secoes. O resumo comum ganha um titulo.
+  if (sess.summary) out.push(...(/^##\s/m.test(sess.summary) ? [] : ['## Resumo', '']), sess.summary, '');
   const transcript = entries.filter((e) => e.kind === 'transcript');
   if (transcript.length) {
     out.push('## Transcrição', '');
-    for (const e of transcript) out.push(`**${SPEAKER_LABEL[e.speaker] || e.speaker}:** ${e.text}`, '');
+    const clock = (ts) => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    for (const e of transcript) out.push(`\`${clock(e.ts)}\` **${SPEAKER_LABEL[e.speaker] || e.speaker}:** ${e.text}`, '');
   }
   const qa = entries.filter((e) => e.kind !== 'transcript');
   if (qa.length) {
@@ -969,12 +1050,82 @@ function sessionMarkdown(data) {
   return out.join('\n');
 }
 
+function sessionFileName(sess) {
+  const start = new Date(sess.started_at);
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())} ${pad(start.getHours())}h${pad(start.getMinutes())}`;
+  const safeTitle = (sess.title || 'Sessão').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  return `${stamp} ${safeTitle}.md`;
+}
+
+// Pasta das atas: o cofre do Obsidian, se houver, ou a pasta Documentos. Sempre na subpasta Aside.
+function notesDir() {
+  const vault = settings.load().obsidianVault;
+  const dir = path.join(vault && fs.existsSync(vault) ? vault : app.getPath('documents'), 'Aside');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// Salva a sessao em Markdown na pasta das atas, sem perguntar onde.
+function saveSessionFile(id) {
+  const data = db.getSession(id);
+  if (!data) throw new Error('Sessão não encontrada.');
+  const target = path.join(notesDir(), sessionFileName(data.session));
+  fs.writeFileSync(target, sessionMarkdown(data), 'utf8');
+  return target;
+}
+
+// Botao "Salvar em Markdown" da barra: a sessao em andamento ou, sem ela, a ultima.
+function exportQuick() {
+  const id = live.id || (db.listSessions('')[0] || {}).id;
+  if (!id) throw new Error('Ainda não há sessão para salvar.');
+  const file = saveSessionFile(id);
+  shell.showItemInFolder(file);
+  return file;
+}
+
+/* ---------- configuracao guiada ---------- */
+
+// O que recomendar neste computador. Com placa NVIDIA a transcricao roda na GPU e aguenta um modelo maior.
+async function setupInfo() {
+  let nvidia = false;
+  try {
+    const info = await app.getGPUInfo('basic');
+    nvidia = (info.gpuDevice || []).some((d) => d.vendorId === 0x10de);
+  } catch {
+    nvidia = false;
+  }
+  return {
+    nvidia,
+    whisperVariant: nvidia ? 'cuda' : 'cpu',
+    whisperModel: nvidia ? 'medium' : 'base',
+    llamaVariant: 'vulkan',
+    llamaFile: 'google_gemma-3-4b-it-Q4_K_M.gguf',
+  };
+}
+
+const GROQ = {
+  customBase: 'https://api.groq.com/openai/v1',
+  customModel: 'openai/gpt-oss-120b',
+  customBackupModel: 'openai/gpt-oss-20b',
+  dayTokenLimit: 200000,
+};
+
+// Passo "quem responde" da configuracao guiada: grava a chave, aplica o servico recomendado e testa de verdade.
+async function setupCloud(key) {
+  const value = String(key || '').trim();
+  if (value) settings.setCustomKey(value);
+  if (!settings.getCustomKey()) throw new Error('Cole a chave antes de salvar.');
+  changeSettings({ ...GROQ, chatProvider: 'custom', economy: true });
+  const target = await chatTarget();
+  await openrouter.complete({ ...target, messages: [{ role: 'user', content: 'ok' }], maxTokens: 1 });
+  return { model: target.model };
+}
+
 async function exportSession(id) {
   const data = db.getSession(id);
   if (!data) throw new Error('Sessão não encontrada.');
-  const date = new Date(data.session.started_at).toISOString().slice(0, 10);
-  const safeTitle = (data.session.title || 'Sessão').replace(/[\\/:*?"<>|]/g, ' ').trim();
-  const name = `${date} ${safeTitle}.md`;
+  const name = sessionFileName(data.session);
   const vault = settings.load().obsidianVault;
   let target;
   if (vault && fs.existsSync(vault)) {
@@ -1069,9 +1220,15 @@ function registerIpc() {
   ipcMain.handle('history:summarize', (_e, id) => {
     const { lines, turns } = sessionFromDb(id);
     if (!lines.length && !turns.length) throw new Error('Sessão vazia, nada para resumir.');
-    return summarize(id, lines, turns);
+    const sess = db.getSession(id).session;
+    const mode = settings.load().assistants.find((a) => a.id === sess.assistant);
+    return summarize(id, lines, turns, Boolean(mode && mode.listener));
   });
   ipcMain.handle('history:export', (_e, id) => exportSession(id));
+  ipcMain.handle('export:quick', () => exportQuick());
+  ipcMain.handle('setup:info', () => setupInfo());
+  ipcMain.handle('setup:cloud', (_e, key) => setupCloud(key));
+  ipcMain.on('open:groq', () => shell.openExternal('https://console.groq.com/keys'));
   ipcMain.handle('dialog:folder', async () => {
     const result = await dialog.showOpenDialog(settingsWin || undefined, { properties: ['openDirectory'] });
     return result.canceled ? null : result.filePaths[0];
@@ -1246,6 +1403,10 @@ if (!app.requestSingleInstanceLock()) {
     } else if (process.env.ASIDE_MCP_TEST) {
       require('./dev')
         .mcpTest({ mcp, openrouter })
+        .finally(() => app.quit());
+    } else if (process.env.ASIDE_NOTES_TEST) {
+      require('./dev')
+        .notesTest({ settings, db, startSession, stopSession, tap: (fn) => { devTap = fn; } })
         .finally(() => app.quit());
     } else if (process.env.ASIDE_QUOTA_TEST) {
       require('./dev')

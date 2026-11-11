@@ -428,6 +428,78 @@ details.group.adv > summary {
   border-radius: 2px;
 }
 
+/* ---------- configuracao guiada ---------- */
+
+.guide h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guide .num {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.guide.done .num {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #06250f;
+}
+
+.guide #gKey {
+  flex: 1;
+  min-width: 220px;
+}
+
+.guide .steps {
+  margin: 4px 0 12px;
+}
+
+.tip {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(76, 141, 255, 0.35);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+ul.plain {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+ul.plain b {
+  color: var(--text);
+}
+
+.lrow .rec {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: #a9c8ff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .checklist {
   display: flex;
   flex-direction: column;
@@ -876,4 +948,8 @@ button.lrow:hover {
   .shortcut input {
     width: 100%;
   }
+}
+
+button:disabled {
+  opacity: 0.45;
 }

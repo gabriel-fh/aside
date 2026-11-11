@@ -162,17 +162,20 @@
     el.tabAnswer.classList.toggle('on', !transcript);
     el.tabTranscript.classList.toggle('on', transcript);
     if (transcript) el.transcript.scrollTop = el.transcript.scrollHeight;
+    document.getElementById('saveMd').hidden = !transcript;
   }
+  document.getElementById('saveMd').addEventListener('click', async () => {
+    try {
+      showStatus(`Salvo em ${await api.exportQuick()}`, 'info');
+    } catch (error) {
+      showStatus(String(error.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+    }
+  });
   el.tabAnswer.addEventListener('click', () => showView('answer'));
   el.tabTranscript.addEventListener('click', () => showView('transcript'));
 
   function setFolded(folded) {
     el.root.classList.toggle('folded', folded);
-    try {
-      localStorage.setItem('folded', folded ? '1' : '');
-    } catch {
-      // sem armazenamento, o estado vale so para esta execucao
-    }
   }
   el.foldBtn.addEventListener('click', () => setFolded(!el.root.classList.contains('folded')));
 
@@ -183,8 +186,8 @@
     busy = true;
     try {
       if (!settings.ready) {
-        showStatus('Antes, conecte uma inteligência artificial.');
-        api.openSettings('geral');
+        showStatus('Antes, faça a configuração guiada.');
+        api.openSettings('guia');
         return;
       }
       el.transcript.innerHTML = EMPTY_TRANSCRIPT;
@@ -344,7 +347,7 @@
 
   el.assistant.addEventListener('change', () => api.setSettings({ activeAssistantId: el.assistant.value }));
   el.cfgBtn.addEventListener('click', () => api.openSettings());
-  document.getElementById('setupBtn').addEventListener('click', () => api.openSettings('geral'));
+  document.getElementById('setupBtn').addEventListener('click', () => api.openSettings('guia'));
   el.hideBtn.addEventListener('click', () => api.hideOverlay());
 
   // Medidor de cota: quanto resta do limite diario de tokens do modelo da nuvem em uso.
@@ -380,11 +383,8 @@
 
   el.answer.innerHTML = EMPTY_ANSWER;
   el.transcript.innerHTML = EMPTY_TRANSCRIPT;
-  try {
-    if (localStorage.getItem('folded')) el.root.classList.add('folded');
-  } catch {
-    // segue expandido
-  }
+  // O app abre so com a barra. O painel aparece quando chega uma resposta ou ao clicar na seta.
+  el.root.classList.add('folded');
   api.getSettings().then(applySettings);
   api.getSession().then(applySession);
 })();

@@ -244,4 +244,87 @@ async function quotaTest({ settings, ask, startSession, stopSession, quotaView, 
   }
 }
 
-module.exports = { localTest, mcpTest, contextTest, quotaTest };
+// ASIDE_NOTES_TEST=<pasta> (exige ASIDE_DATA_DIR): reuniao longa no modo ouvinte contra um provedor falso.
+// Confere o resumo por trechos e a ata salva em Markdown.
+async function notesTest({ settings, db, startSession, stopSession, tap }) {
+  const http = require('http');
+  const log = (...args) => console.log('[ata]', ...args);
+  if (!process.env.ASIDE_DATA_DIR) return log('FALHOU: defina ASIDE_DATA_DIR.');
+  const seen = [];
+  const fake = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      const { messages } = JSON.parse(body);
+      const system = messages[0].content;
+      const kind = /trecho da transcrição/.test(system) ? 'trecho' : /resume sessões/.test(system) ? 'ata' : 'outro';
+      seen.push(`${kind} (${JSON.stringify(messages).length} caracteres)`);
+      const text =
+        kind === 'ata'
+          ? [
+              'Planejamento do trimestre',
+              '## Resumo',
+              'A equipe revisou o orçamento.',
+              '',
+              '## Tópicos discutidos',
+              '- Orçamento',
+              '',
+              '## Decisões',
+              '- Aprovar a proposta',
+              '',
+              '## Pendências',
+              '- Ana envia a planilha até sexta',
+            ].join('\n')
+          : '- Discutiram o orçamento';
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`);
+      res.end('data: [DONE]\n\n');
+    });
+  });
+  await new Promise((r) => fake.listen(0, '127.0.0.1', r));
+  const events = [];
+  tap((channel, payload) => channel === 'status' && events.push(payload.message));
+  try {
+    const s = settings.load();
+    log('modo ouvinte existe:', s.assistants.some((a) => a.id === 'ouvinte' && a.listener), '| stealth:', s.stealth);
+    settings.update({
+      chatProvider: 'custom',
+      customBase: `http://127.0.0.1:${fake.address().port}`,
+      customModel: 'falso',
+      customBackupModel: '',
+      economy: true,
+      autoSummary: false,
+      hybridLocal: false,
+      localFallback: false,
+      activeAssistantId: 'ouvinte',
+      obsidianVault: process.env.ASIDE_NOTES_TEST,
+    });
+    const { id } = startSession();
+    const t0 = Date.now();
+    for (let i = 0; i < 300; i++) {
+      db.addEntry(id, {
+        kind: 'transcript',
+        speaker: i % 2 ? 'me' : 'them',
+        text: `Fala número ${i} sobre o orçamento do trimestre e os prazos de entrega da equipe de produto.`,
+        ts: t0 + i * 1000,
+      });
+    }
+    await stopSession();
+    for (let i = 0; i < 100 && !events.some((m) => m.startsWith('Ata salva')); i++) await new Promise((r) => setTimeout(r, 100));
+    log('pedidos:', seen.join(' > '));
+    for (const e of events) log('aviso:', e);
+    const dir = require('path').join(process.env.ASIDE_NOTES_TEST, 'Aside');
+    for (const f of fs.readdirSync(dir)) {
+      const text = fs.readFileSync(require('path').join(dir, f), 'utf8');
+      log('arquivo:', f, '|', text.length, 'caracteres');
+      console.log(text.split('\n').slice(0, 26).join('\n'));
+    }
+  } catch (error) {
+    log('FALHOU:', error.message);
+  } finally {
+    tap(null);
+    fake.close();
+  }
+}
+
+module.exports = { localTest, mcpTest, contextTest, quotaTest, notesTest };

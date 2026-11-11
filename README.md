@@ -14,6 +14,14 @@ Assistente flutuante para Windows que acompanha reuniões, aulas e sessões de e
 - Modo stealth: as janelas somem de capturas e compartilhamento de tela, e da barra de tarefas.
 - Atalhos globais configuráveis.
 
+## Configuração guiada
+
+Na primeira abertura o Aside mostra a Configuração guiada: um clique instala a transcrição recomendada para o computador (Whisper na placa NVIDIA, ou na CPU) e um campo recebe a chave do Groq, que é testada na hora. As telas Ajustes e Usar offline marcam com "Recomendado" o que vale instalar.
+
+## Ouvinte de reunião
+
+O modo Ouvinte de reunião só registra a conversa, sem sugerir respostas. Ao encerrar a sessão ele gera a ata (resumo, tópicos, decisões e pendências) e salva tudo em Markdown em `DocumentosAside`, ou na subpasta Aside do cofre do Obsidian. Em qualquer modo, o botão "Salvar em Markdown" da aba Transcrição faz o mesmo na hora. Conversas longas são resumidas por trechos, para caber no limite de serviços gratuitos.
+
 ## Como rodar
 
 ```bash

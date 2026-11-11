@@ -35,6 +35,10 @@ contextBridge.exposeInMainWorld('aside', {
   historyDelete: invoke('history:delete'),
   historySummarize: invoke('history:summarize'),
   historyExport: invoke('history:export'),
+  exportQuick: invoke('export:quick'),
+  setupInfo: invoke('setup:info'),
+  setupCloud: invoke('setup:cloud'),
+  openGroqKeys: () => ipcRenderer.send('open:groq'),
   pickFolder: invoke('dialog:folder'),
 
   pickContextFiles: invoke('context:pick'),

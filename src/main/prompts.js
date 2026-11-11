@@ -8,6 +8,13 @@ const DEFAULT_ASSISTANTS = [
       'Contexto: o usuário está em uma reunião ou chamada. Ajude a acompanhar a conversa: responda perguntas feitas a ele, lembre pontos já ditos, aponte decisões, pendências e riscos. Quando sugerir algo para dizer, escreva em frases curtas e naturais.',
   },
   {
+    id: 'ouvinte',
+    name: 'Ouvinte de reunião',
+    listener: true,
+    prompt:
+      'Contexto: o Aside está só registrando uma reunião para gerar a ata. Não sugira falas. Quando o usuário perguntar algo, responda com base no que já foi dito na reunião: quem disse o quê, o que ficou decidido e o que está pendente.',
+  },
+  {
     id: 'entrevista',
     name: 'Entrevista',
     interview: true,
@@ -234,15 +241,20 @@ function buildChatMessages({
   return messages;
 }
 
-function buildSummaryMessages({ lines, turns, responseLanguage }) {
+// Resumo de uma sessao. Em conversas longas, `notes` traz as anotacoes de cada trecho no lugar da transcricao.
+// `minutes` pede o formato de ata, usado pelo modo ouvinte.
+function buildSummaryMessages({ lines, turns, responseLanguage, notes = '', minutes = false }) {
   const qa = turns.map((t) => `Pergunta: ${t.q}\nResposta: ${t.a}`).join('\n\n');
+  const body = minutes
+    ? 'Depois, em markdown, a ata da reunião com estas seções: "Resumo" (poucos parágrafos), "Tópicos discutidos" (lista), "Decisões" (lista) e "Pendências" (lista, com responsável e prazo quando houver). Seção sem conteúdo recebe "Nada registrado."'
+    : 'Depois, em markdown: um resumo em poucos parágrafos, uma lista de decisões e uma lista de pendências com responsável quando houver.';
   return [
     {
       role: 'system',
       content: [
         'Você resume sessões gravadas pelo Aside.',
         'Primeira linha: um título curto, sem markdown e sem aspas.',
-        'Depois, em markdown: um resumo em poucos parágrafos, uma lista de decisões e uma lista de pendências com responsável quando houver.',
+        body,
         'Use só o que está na transcrição.',
         responseLanguage ? `Escreva em: ${responseLanguage}.` : '',
       ]
@@ -251,10 +263,31 @@ function buildSummaryMessages({ lines, turns, responseLanguage }) {
     },
     {
       role: 'user',
-      content: [`Transcrição:\n${formatTranscript(lines, 2000)}`, qa ? `Perguntas ao assistente:\n${qa}` : '']
+      content: [
+        notes ? `Anotações de cada trecho da conversa, em ordem:\n${notes}` : `Transcrição:\n${formatTranscript(lines, 2000)}`,
+        qa ? `Perguntas ao assistente:\n${qa}` : '',
+      ]
         .filter(Boolean)
         .join('\n\n'),
     },
+  ];
+}
+
+// Anotacoes de um trecho de uma conversa longa, para o resumo final caber no limite do servico.
+function buildNotesMessages(text, responseLanguage) {
+  return [
+    {
+      role: 'system',
+      content: [
+        'Você recebe um trecho da transcrição de uma conversa.',
+        'Liste em tópicos curtos o que foi discutido, o que foi decidido e o que ficou pendente, com nomes quando aparecerem.',
+        'Use só o que está no trecho. Sem introdução e sem conclusão.',
+        responseLanguage ? `Escreva em: ${responseLanguage}.` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    },
+    { role: 'user', content: text },
   ];
 }
 
@@ -265,7 +298,9 @@ module.exports = {
   activeJob,
   buildBriefMessages,
   buildChatMessages,
+  buildNotesMessages,
   buildSummaryMessages,
+  formatTranscript,
   briefSlot,
   contextBlock,
   contextKey,
